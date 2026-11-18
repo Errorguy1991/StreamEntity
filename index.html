@@ -455,22 +455,23 @@
 
   /* ================= Server status ================= */
   .server-status-card{
-    display:flex;align-items:center;gap:13px;
+    display:flex;align-items:center;gap:12px;
     background:var(--panel);border:1px solid var(--stroke-soft);border-radius:var(--radius);
-    padding:13px 18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    padding:10px 16px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    overflow:hidden;
   }
   .server-dot{width:10px;height:10px;border-radius:50%;background:var(--text-3);flex:none}
   .server-dot.checking{background:var(--orange);box-shadow:0 0 8px rgba(255,159,10,.7)}
   .server-dot.ok{background:var(--green);box-shadow:0 0 8px rgba(48,209,88,.8)}
   .server-dot.bad{background:var(--red);box-shadow:0 0 8px rgba(255,69,58,.7)}
-  .server-status-text{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
-  .server-status-title{font-size:13.5px;font-weight:700}
-  .server-status-desc{font-size:12px;color:var(--text-2);line-height:1.45}
-  .server-action-cluster{display:flex;align-items:center;gap:8px;flex:none;flex-wrap:wrap}
+  .server-status-text{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1;overflow:hidden}
+  .server-status-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .server-status-desc{font-size:11.5px;color:var(--text-2);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .server-action-cluster{display:flex;align-items:center;gap:8px;flex:none}
   .server-test-btn{
-    flex:none;font-size:12.5px;font-weight:600;padding:7px 16px;min-height:34px;
+    flex:none;font-size:12px;font-weight:600;padding:6px 14px;min-height:32px;
     border-radius:999px;border:1px solid var(--stroke);color:var(--text);background:var(--panel-strong);
-    cursor:pointer;transition:transform .18s ease;
+    cursor:pointer;transition:transform .18s ease;white-space:nowrap;
   }
   .server-test-btn:active{transform:scale(.96)}
   .server-config-btn{background:var(--cta-bg);color:var(--cta-color);border-color:var(--cta-bg)}
@@ -626,6 +627,11 @@
     .input-icon-slot{display:none}
     .apple-search-input{flex:1 1 100%;padding:8px 12px 2px}
     .btn-stream-white{width:100%;justify-content:center;margin:2px}
+    .server-status-card{padding:7px 12px;gap:8px;border-radius:12px}
+    .server-status-title{font-size:11.5px;font-weight:600}
+    .server-status-desc{display:none}
+    .server-action-cluster{gap:6px;flex:none}
+    .server-test-btn{font-size:11px;padding:4px 9px;min-height:26px}
     .apple-playback-triplet{gap:18px}
     .player-main-title{font-size:16px}
     .radar-canvas{height:auto;aspect-ratio:1100/560}
@@ -1278,10 +1284,7 @@
     <!-- Donations -->
     <section class="donate-card">
       <div class="donate-head">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span class="section-title">DONATE</span>
-          <button type="button" id="btnEditDonations" style="background:transparent;border:1px solid var(--stroke-soft);color:var(--text-2);padding:3px 10px;border-radius:999px;font-size:11px;cursor:pointer;" title="Edit Donation Handles">⚙ Edit Handles</button>
-        </div>
+        <span class="section-title">DONATE</span>
         <span class="donate-sub">Support open-source development · Chai Paani ka Kharcha 🍵</span>
       </div>
       <div class="donate-grid">
@@ -1468,9 +1471,8 @@
           </div>
         </div>
 
-        <div style="width:100%;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--stroke-soft);padding-top:12px;">
-          <a id="btnOpenUpiApp" href="upi://pay?pa=vishalayu-3@oksbi&pn=Vishal%20Mallick&cu=INR" class="copy-url-btn" style="text-decoration:none;font-size:12px;padding:7px 14px;">Open UPI App</a>
-          <button type="button" id="btnEditDonationsFromUpi" style="background:transparent;border:1px solid var(--stroke-soft);color:var(--text-2);padding:4px 10px;border-radius:999px;font-size:11px;cursor:pointer;">⚙ Edit Handles</button>
+        <div style="width:100%;display:flex;justify-content:center;align-items:center;border-top:1px solid var(--stroke-soft);padding-top:12px;">
+          <a id="btnOpenUpiApp" href="upi://pay?pa=vishalayu-3@oksbi&pn=Vishal%20Mallick&cu=INR" class="copy-url-btn" style="text-decoration:none;font-size:12.5px;padding:9px 24px;width:100%;text-align:center;">Open UPI App</a>
         </div>
       </div>
     </div>
@@ -1504,38 +1506,6 @@
             <a id="btnOpenRevolutWeb" href="https://revolut.me/vr91" target="_blank" rel="noopener noreferrer" class="copy-url-btn" style="background:var(--panel-strong);border:1px solid var(--stroke);color:var(--text);text-decoration:none;">Open Link ↗</a>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Edit Donation Handles Modal -->
-  <div id="donationsEditModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="donationsEditModalTitle">
-    <div class="modal-card" style="width:min(440px, 100%);">
-      <div class="modal-header">
-        <div class="modal-title-cluster">
-          <span class="modal-icon">⚙️</span>
-          <div>
-            <h3 id="donationsEditModalTitle" class="modal-title">Edit Donation Links</h3>
-            <p class="modal-subtitle">Customize links for Ko-fi, Revolut, and UPI</p>
-          </div>
-        </div>
-        <button type="button" id="btnCloseDonationsEditModal" class="modal-close-btn" aria-label="Close dialog">✕</button>
-      </div>
-
-      <div class="modal-body" style="align-items:stretch;">
-        <div class="network-url-box">
-          <span class="network-url-label">Ko-fi / Coffee URL</span>
-          <input type="text" id="inputKofiUrl" class="network-url-input" placeholder="https://ko-fi.com/vivescrn" />
-        </div>
-        <div class="network-url-box">
-          <span class="network-url-label">Revolut Link / Handle</span>
-          <input type="text" id="inputRevolutUrl" class="network-url-input" placeholder="https://revolut.me/vr91" />
-        </div>
-        <div class="network-url-box">
-          <span class="network-url-label">UPI ID</span>
-          <input type="text" id="inputUpiId" class="network-url-input" placeholder="vishalayu-3@oksbi" />
-        </div>
-        <button type="button" id="btnSaveDonationHandles" class="copy-url-btn" style="width:100%;padding:10px;font-size:13px;margin-top:4px;">Save Links</button>
       </div>
     </div>
   </div>
@@ -3720,28 +3690,13 @@
   var btnCloseRevolutModal = $("btnCloseRevolutModal");
   var btnCopyRevolutHandle = $("btnCopyRevolutHandle");
 
-  var donationsEditModal = $("donationsEditModal");
-  var btnEditDonations = $("btnEditDonations");
-  var btnEditDonationsFromUpi = $("btnEditDonationsFromUpi");
-  var btnCloseDonationsEditModal = $("btnCloseDonationsEditModal");
-  var inputKofiUrl = $("inputKofiUrl");
-  var inputRevolutUrl = $("inputRevolutUrl");
-  var inputUpiId = $("inputUpiId");
-  var btnSaveDonationHandles = $("btnSaveDonationHandles");
-
-  function getDonationConfig() {
-    try {
-      var stored = localStorage.getItem("streamentity_donations_v2");
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return {
-      kofi: "https://ko-fi.com/vivescrn",
-      revolut: "https://revolut.me/vr91",
-      revolutHandle: "@vr91",
-      upi: "vishalayu-3@oksbi",
-      upiName: "Vishal Mallick"
-    };
-  }
+  var DONATION_CONFIG = {
+    kofi: "https://ko-fi.com/vivescrn",
+    revolut: "https://revolut.me/vr91",
+    revolutHandle: "@vr91",
+    upi: "vishalayu-3@oksbi",
+    upiName: "Vishal Mallick"
+  };
 
   function applyDonationConfig(cfg) {
     var kofiLink = $("donateKofiLink");
@@ -3759,13 +3714,12 @@
     }
   }
 
-  applyDonationConfig(getDonationConfig());
+  applyDonationConfig(DONATION_CONFIG);
 
   function openUpiModal() {
     if (!upiModal) return;
-    var cfg = getDonationConfig();
     upiModal.classList.remove("hidden");
-    if (upiIdInput) upiIdInput.value = cfg.upi;
+    if (upiIdInput) upiIdInput.value = DONATION_CONFIG.upi;
   }
 
   function closeUpiModal() {
@@ -3790,13 +3744,12 @@
   }
   if (btnCopyUpiId) {
     btnCopyUpiId.addEventListener("click", function () {
-      var cfg = getDonationConfig();
-      navigator.clipboard.writeText(cfg.upi)
-        .then(function () { toast("Copied UPI ID: " + cfg.upi); })
+      navigator.clipboard.writeText(DONATION_CONFIG.upi)
+        .then(function () { toast("Copied UPI ID: " + DONATION_CONFIG.upi); })
         .catch(function () {
           upiIdInput.select();
           document.execCommand("copy");
-          toast("Copied UPI ID: " + cfg.upi);
+          toast("Copied UPI ID: " + DONATION_CONFIG.upi);
         });
     });
   }
@@ -3810,51 +3763,12 @@
   }
   if (btnCopyRevolutHandle) {
     btnCopyRevolutHandle.addEventListener("click", function () {
-      var cfg = getDonationConfig();
-      var handle = cfg.revolutHandle || "@vr91";
+      var handle = DONATION_CONFIG.revolutHandle || "@vr91";
       navigator.clipboard.writeText(handle)
         .then(function () { toast("Copied " + handle); })
         .catch(function () {
           toast("Copied " + handle);
         });
-    });
-  }
-
-  function openDonationsEditModal() {
-    closeUpiModal();
-    closeRevolutModal();
-    var cfg = getDonationConfig();
-    if (inputKofiUrl) inputKofiUrl.value = cfg.kofi;
-    if (inputRevolutUrl) inputRevolutUrl.value = cfg.revolut;
-    if (inputUpiId) inputUpiId.value = cfg.upi;
-    if (donationsEditModal) donationsEditModal.classList.remove("hidden");
-  }
-
-  function closeDonationsEditModal() {
-    if (donationsEditModal) donationsEditModal.classList.add("hidden");
-  }
-
-  if (btnEditDonations) btnEditDonations.addEventListener("click", openDonationsEditModal);
-  if (btnEditDonationsFromUpi) btnEditDonationsFromUpi.addEventListener("click", openDonationsEditModal);
-  if (btnCloseDonationsEditModal) btnCloseDonationsEditModal.addEventListener("click", closeDonationsEditModal);
-  if (donationsEditModal) {
-    donationsEditModal.addEventListener("click", function (e) {
-      if (e.target === donationsEditModal) closeDonationsEditModal();
-    });
-  }
-  if (btnSaveDonationHandles) {
-    btnSaveDonationHandles.addEventListener("click", function () {
-      var cfg = {
-        kofi: (inputKofiUrl.value || "https://ko-fi.com/vivescrn").trim(),
-        revolut: (inputRevolutUrl.value || "https://revolut.me/vr91").trim(),
-        revolutHandle: "@vr91",
-        upi: (inputUpiId.value || "vishalayu-3@oksbi").trim(),
-        upiName: "Vishal Mallick"
-      };
-      localStorage.setItem("streamentity_donations_v2", JSON.stringify(cfg));
-      applyDonationConfig(cfg);
-      toast("Donation handles saved!");
-      closeDonationsEditModal();
     });
   }
 
@@ -3864,7 +3778,6 @@
       closeServerModal();
       closeUpiModal();
       closeRevolutModal();
-      closeDonationsEditModal();
     }
   });
 

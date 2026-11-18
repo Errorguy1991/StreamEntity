@@ -36,8 +36,25 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
+// Cross-Origin Resource Sharing (CORS) for hybrid cloud & cross-device web app
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range, Authorization');
+  res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json());
 app.use(express.static(__dirname));
+
+// Health check endpoint for cloud deploy checks & latency verification
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', engine: 'StreamEntity', version: '1.0.0', uptime: process.uptime() });
+});
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
@@ -154,12 +171,13 @@ function getLocalNetworkIp() {
   return candidates[0]?.address || '127.0.0.1';
 }
 
-// QR Code for iPad / Mobile LAN connection
+// QR Code for iPad / Mobile LAN connection or custom payloads (e.g. UPI)
 app.get('/api/qrcode', async (req, res) => {
   try {
     const localIp = getLocalNetworkIp();
     const networkUrl = `http://${localIp}:${PORT}`;
-    const qrDataUrl = await QRCode.toDataURL(networkUrl, {
+    const targetUrl = req.query.text || networkUrl;
+    const qrDataUrl = await QRCode.toDataURL(targetUrl, {
       margin: 2,
       width: 320,
       color: { dark: '#111214', light: '#ffffff' }
@@ -167,7 +185,7 @@ app.get('/api/qrcode', async (req, res) => {
     res.json({
       ip: localIp,
       port: PORT,
-      url: networkUrl,
+      url: targetUrl,
       qrDataUrl
     });
   } catch (err) {

@@ -1,22 +1,9 @@
 # StreamEntity — Sequential Streaming Engine & Swarm Visualizer
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Errorguy1991/StreamEntity)
-
 - **Live Web App**: [https://streamentity.web.app](https://streamentity.web.app)
 - **GitHub Repository**: [https://github.com/Errorguy1991/StreamEntity](https://github.com/Errorguy1991/StreamEntity)
 
 StreamEntity is a hybrid sequential BitTorrent streaming engine with live peer swarm visualization, FUSE piece buffer management, and cross-device support (Desktop, iPad, Android).
-
----
-
-## 🚀 1-Click Free Cloud Deployment (Bring Your Own Cloud)
-
-Anyone can run their own private, free 24/7 streaming cloud backend without keeping a PC on:
-
-1. Click the **[Deploy to Render](https://render.com/deploy?repo=https://github.com/Errorguy1991/StreamEntity)** button above.
-2. Sign in with GitHub and click **Create Web Service** (100% free tier).
-3. Copy your unique live URL (e.g. `https://streamentity-xxx.onrender.com`).
-4. Open [https://streamentity.web.app](https://streamentity.web.app) on your iPad, phone, or laptop, open **Cloud Settings**, and paste your URL!
 
 ---
 
@@ -30,6 +17,15 @@ npm start
 # -> Network: http://192.168.x.x:3000
 ```
 On Windows, you can simply double-click `start.bat`. To stream on an iPad or phone on the same Wi-Fi, scan the QR code generated in the terminal or navigate to your PC's network IP.
+
+---
+
+## ☁️ Custom Cloud Backend (VPS / Dedicated Server / Tunnel)
+
+If you host a remote StreamEntity engine on a Linux VPS (Oracle Cloud, Hetzner, DigitalOcean) or through a secure tunnel (`cloudflared tunnel` / `ngrok`):
+1. Start the StreamEntity server on your remote machine or PC.
+2. In the web app, tap **Cloud Settings** and paste your public HTTPS endpoint.
+3. The app will stream video chunks directly through your remote engine.
 
 ## Contents
 

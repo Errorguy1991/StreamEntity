@@ -6,6 +6,8 @@
       "**/.*",
       "**/node_modules/**",
       "cache/**",
+      "hls/**",
+      "hls-manager.js",
       "android/**",
       "*.apk",
       "*.bat",

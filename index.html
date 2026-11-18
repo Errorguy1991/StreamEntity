@@ -455,11 +455,12 @@
 
   /* ================= Server status ================= */
   .server-status-card{
-    display:flex;align-items:center;gap:12px;
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
     background:var(--panel);border:1px solid var(--stroke-soft);border-radius:var(--radius);
     padding:10px 16px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     overflow:hidden;
   }
+  .server-status-header{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
   .server-dot{width:10px;height:10px;border-radius:50%;background:var(--text-3);flex:none}
   .server-dot.checking{background:var(--orange);box-shadow:0 0 8px rgba(255,159,10,.7)}
   .server-dot.ok{background:var(--green);box-shadow:0 0 8px rgba(48,209,88,.8)}
@@ -627,11 +628,48 @@
     .input-icon-slot{display:none}
     .apple-search-input{flex:1 1 100%;padding:8px 12px 2px}
     .btn-stream-white{width:100%;justify-content:center;margin:2px}
-    .server-status-card{padding:7px 12px;gap:8px;border-radius:12px}
-    .server-status-title{font-size:11.5px;font-weight:600}
-    .server-status-desc{display:none}
-    .server-action-cluster{gap:6px;flex:none}
-    .server-test-btn{font-size:11px;padding:4px 9px;min-height:26px}
+    .server-status-card{
+      flex-direction:column;
+      align-items:stretch;
+      gap:9px;
+      padding:10px 14px;
+      border-radius:14px;
+    }
+    .server-status-header{
+      align-items:flex-start;
+      gap:10px;
+      width:100%;
+    }
+    .server-status-card .server-dot{
+      margin-top:4px;
+    }
+    .server-status-title{
+      font-size:12px;
+      font-weight:700;
+      white-space:normal;
+      line-height:1.3;
+    }
+    .server-status-desc{
+      font-size:11px;
+      color:var(--text-2);
+      line-height:1.35;
+      white-space:normal;
+      word-break:break-word;
+      margin-top:2px;
+    }
+    .server-action-cluster{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+      width:100%;
+    }
+    .server-test-btn{
+      width:100%;
+      text-align:center;
+      font-size:11.5px;
+      padding:6px 8px;
+      min-height:30px;
+    }
     .apple-playback-triplet{gap:18px}
     .player-main-title{font-size:16px}
     .radar-canvas{height:auto;aspect-ratio:1100/560}
@@ -847,10 +885,12 @@
 
     <!-- Server connection status: how to tell whether streaming can work -->
     <section class="server-status-card" aria-live="polite">
-      <span class="server-dot checking" id="serverDot" aria-hidden="true"></span>
-      <div class="server-status-text">
-        <span class="server-status-title" id="serverStatusTitle">Streaming server: checking…</span>
-        <span class="server-status-desc" id="serverStatusDesc">This page streams through the StreamEntity Node server — it has to be running and serving this page for Stream Now to work.</span>
+      <div class="server-status-header">
+        <span class="server-dot checking" id="serverDot" aria-hidden="true"></span>
+        <div class="server-status-text">
+          <span class="server-status-title" id="serverStatusTitle">Streaming server: checking…</span>
+          <span class="server-status-desc" id="serverStatusDesc">This page streams through the StreamEntity Node server — it has to be running and serving this page for Stream Now to work.</span>
+        </div>
       </div>
       <div class="server-action-cluster">
         <button type="button" id="btnTestServer" class="server-test-btn">Test connection</button>
@@ -3123,7 +3163,15 @@
     if (!data) return;
     var torrents = data.torrents || [];
     latestTorrents = torrents;
-    var active = data.activeTorrent || torrents[0] || null;
+    var active = null;
+    if (currentHash) {
+      active = torrents.find(function (t) { return t.infoHash && t.infoHash.toLowerCase() === currentHash.toLowerCase(); });
+      if (!active && data.activeTorrent && data.activeTorrent.infoHash && data.activeTorrent.infoHash.toLowerCase() === currentHash.toLowerCase()) {
+        active = data.activeTorrent;
+      }
+    } else {
+      active = data.activeTorrent || (torrents.length > 0 ? torrents[torrents.length - 1] : null);
+    }
     if (active && !currentHash) {
       currentHash = active.infoHash;
     }
@@ -3178,18 +3226,22 @@
     setText("swarmSeeders", String(totalSeeds));
 
     // Swarm torrent nodes — title/details come from the live torrent
-    var title = active.cleanTitle || cleanTitle(active.name || "") || currentTitle;
+    var title = (active && (active.cleanTitle || cleanTitle(active.name || ""))) || currentTitle;
     setText("torrent1Title", title);
-    var details = extractDetails(active.name || currentMagnet.dn || "");
+    var details = extractDetails((active && active.name) || currentMagnet.dn || "");
     if (details) setText("torrent1Sub", details);
-    setText("torrent1Meta",
-      toMbps(active.downloadSpeed).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers · " +
-      currentMagnet.trackers.length + " trackers");
+    if (active) {
+      setText("torrent1Meta",
+        toMbps(active.downloadSpeed).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers · " +
+        (currentMagnet.trackers ? currentMagnet.trackers.length : 0) + " trackers");
+    }
     setText("client1Sub", title);
-    setNowPlaying(title,
-      (details ? details + " · " : "") +
-      toMbps(active.downloadSpeed).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers");
-    if (currentHash && active.infoHash === currentHash) {
+
+    if (active && (!currentHash || (active.infoHash && active.infoHash.toLowerCase() === currentHash.toLowerCase()))) {
+      if (active.cleanTitle) currentTitle = active.cleanTitle;
+      setNowPlaying(title,
+        (details ? details + " · " : "") +
+        toMbps(active.downloadSpeed).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers");
       setText("videoTitle", title);
       if (active.activeFileName) setText("activeFileName", active.activeFileName);
     }
@@ -3256,7 +3308,10 @@
     // player title. Those appear from live telemetry / a confirmed
     // stream, so nothing is shown while nothing is streaming.
     currentMagnet = info;
-    currentTitle = cleanTitle(info.dn) || currentTitle;
+    currentTitle = cleanTitle(info.dn) || info.dn || (info.hash ? "Torrent (" + info.hash.substring(0, 8) + "...)" : "New Stream");
+    if (info.hash) {
+      currentHash = info.hash;
+    }
     if (info.dn) {
       var b = badgesFromName(info.dn);
       setText("videoResolutionBadge", b.res);
@@ -3266,10 +3321,24 @@
 
   function startStream(torrentId) {
     var info = parseMagnet(torrentId);
-    if (info.dn || info.hash) applyMagnetLocally(info);
+    if (info.hash) {
+      currentHash = info.hash;
+    }
+    applyMagnetLocally(info);
     recordHistory(torrentId, info);
+
+    // Immediately update UI to the new stream so old movie never lingers
+    setText("videoTitle", currentTitle);
+    setNowPlaying(currentTitle, "Connecting to swarm & resolving metadata…");
     setText("videoStatus", "Connecting…");
     $("videoStatus").classList.remove("idle");
+
+    // Immediately subscribe on WebSocket for this torrent
+    if (ws && ws.readyState === WebSocket.OPEN && currentHash) {
+      try {
+        ws.send(JSON.stringify({ type: "subscribe", infoHash: currentHash }));
+      } catch (e) {}
+    }
 
     fetch(getApiUrl("/api/torrents/add"), {
       method: "POST",
@@ -3283,6 +3352,9 @@
       var t = data.torrent;
       currentHash = t.infoHash;
       currentStreamUrl = getApiUrl("/stream/" + currentHash);
+      if (t.cleanTitle || t.name) {
+        currentTitle = t.cleanTitle || t.name;
+      }
       $("emptyPlayerState").style.display = "none";
       container.classList.add("has-media");
       video.src = currentStreamUrl;
@@ -3291,13 +3363,20 @@
       syncVolumeUI();
       video.play().catch(function () {});
       setText("videoStatus", "Streaming");
-      if (t.cleanTitle) setText("videoTitle", t.cleanTitle);
-      setNowPlaying(t.cleanTitle || currentTitle,
-        extractDetails(t.name || currentMagnet.dn || "") || t.activeFileName || "");
+      setText("videoTitle", currentTitle);
+      setNowPlaying(currentTitle,
+        extractDetails(t.name || currentMagnet.dn || "") || t.activeFileName || "Streaming from peers");
       if (t.activeFileName) setText("activeFileName", t.activeFileName);
-      toast("Streaming " + (t.cleanTitle || t.name || "torrent"));
+      toast("Streaming " + currentTitle);
       showHud();
       syncNowPlayingControls();
+
+      // Refresh WS subscription with confirmed infoHash
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: "subscribe", infoHash: currentHash }));
+        } catch (e) {}
+      }
     }).catch(function () {
       setText("videoStatus", "Idle");
       $("videoStatus").classList.add("idle");

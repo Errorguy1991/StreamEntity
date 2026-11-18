@@ -84,27 +84,35 @@
   html[data-theme="light"] .track-menu button{color:#1c1e21}
   html[data-theme="light"] .track-menu button:hover{background:rgba(16,24,40,.06)}
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
-  body{
-    font-family:var(--font);color:var(--text);
+  html{
+    height:100%;
     background-color:var(--bg);
-    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
-    min-height:100%;
-    zoom:.8; /* whole site rendered 20% zoomed out */
-    position:relative;
+    background-image:radial-gradient(var(--dot) 1px, transparent 1.35px);
+    background-size:20px 20px;
+    background-attachment:fixed;
   }
   /* Site background: constant fixed dot grid (~20px spacing).
      Stationary behind all foreground content so when the user scrolls,
      only the foreground elements move up/down. */
-  body::before{
+  html::before{
     content:"";
     position:fixed;
     top:0;left:0;right:0;bottom:0;
     width:100vw;height:100vh;
     background-image:radial-gradient(var(--dot) 1px, transparent 1.35px);
     background-size:20px 20px;
+    background-attachment:fixed;
     pointer-events:none;
     z-index:0;
+  }
+  body{
+    height:100%;
+    font-family:var(--font);color:var(--text);
+    background:transparent;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    min-height:100%;
+    zoom:.8; /* whole site rendered 20% zoomed out */
+    position:relative;
   }
   .app-header,.main-layout{position:relative;z-index:1}
   button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;min-height:36px}
@@ -1610,7 +1618,7 @@
 
   <!-- Revolut Donation Modal -->
   <div id="revolutModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="revolutModalTitle">
-    <div class="modal-card" style="width:min(420px, 100%);">
+    <div class="modal-card" style="width:min(440px, calc(100vw - 32px));box-sizing:border-box;overflow:hidden;">
       <div class="modal-header">
         <div class="modal-title-cluster">
           <span class="modal-icon">💳</span>
@@ -1622,18 +1630,18 @@
         <button type="button" id="btnCloseRevolutModal" class="modal-close-btn" aria-label="Close dialog">✕</button>
       </div>
 
-      <div class="modal-body">
+      <div class="modal-body" style="width:100%;box-sizing:border-box;">
         <div class="qr-container">
           <img id="revolutQrImg" src="assets/revolut-qr.png" alt="Revolut QR Code" class="qr-image" style="object-fit:contain;" />
         </div>
 
         <span style="font-size:12px;color:var(--text-2);text-align:center;line-height:1.45;">Scan with any phone camera to pay — works even without a Revolut account!</span>
 
-        <div class="network-url-box" style="padding:8px 10px;box-sizing:border-box;width:100%;overflow:hidden;">
+        <div class="network-url-box" style="padding:0;box-sizing:border-box;width:100%;overflow:hidden;">
           <div class="network-url-row" style="display:flex;align-items:center;width:100%;gap:6px;box-sizing:border-box;">
-            <input type="text" id="revolutHandleInput" readonly class="network-url-input" value="@vr91" style="width:48px;min-width:48px;max-width:50px;flex:none;text-align:center;padding:7px 2px;font-size:11px;box-sizing:border-box;" />
-            <button type="button" id="btnCopyRevolutHandle" class="copy-url-btn" style="flex:1 1 auto;min-width:0;padding:7px 4px;font-size:11px;text-align:center;white-space:nowrap;box-sizing:border-box;">Copy @vr91</button>
-            <a id="btnOpenRevolutWeb" href="https://revolut.me/vr91" target="_blank" rel="noopener noreferrer" class="copy-url-btn" style="flex:1.2 1 auto;min-width:0;padding:7px 6px;font-size:11px;text-align:center;white-space:nowrap;background:var(--panel-strong);border:1px solid var(--stroke);color:var(--text);text-decoration:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;">Open Link ↗</a>
+            <input type="text" id="revolutHandleInput" readonly class="network-url-input" value="@vr91" style="width:50px;min-width:46px;max-width:54px;flex:0 0 auto;text-align:center;padding:7px 2px;font-size:11px;font-weight:700;border-radius:8px;box-sizing:border-box;" />
+            <button type="button" id="btnCopyRevolutHandle" class="copy-url-btn" style="flex:1 1 0;min-width:0;padding:7px 6px;font-size:11px;text-align:center;white-space:nowrap;border-radius:8px;box-sizing:border-box;">Copy @vr91</button>
+            <a id="btnOpenRevolutWeb" href="https://revolut.me/vr91" target="_blank" rel="noopener noreferrer" class="copy-url-btn" style="flex:1 1 0;min-width:0;padding:7px 6px;font-size:11px;text-align:center;white-space:nowrap;background:var(--panel-strong);border:1px solid var(--stroke);color:var(--text);text-decoration:none;border-radius:8px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;">Open Link ↗</a>
           </div>
         </div>
       </div>
@@ -2278,20 +2286,13 @@
     ctx.translate(ox, oy);
     ctx.scale(s, s);
 
-    // Land fill — full country path, white in dark / black in light
+    // Ocean coastline borders: Landmasses have natural, crisp borders against
+    // the ocean, with zero internal country borders or river cuts across land.
+    // We fill the landmass as solid continents without stroking internal country cuts.
     var mapPath = getWorldPath();
     if (mapPath) {
       ctx.fillStyle = dark ? "#ffffff" : "#000000";
       ctx.fill(mapPath);
-    }
-
-    // Borders — coastline ONLY. The full path is never stroked,
-    // so no internal country borders appear.
-    var coastPath = getWorldCoastPath();
-    if (coastPath) {
-      ctx.strokeStyle = dark ? "#000000" : "#ffffff";
-      ctx.lineWidth = 1 / s;
-      ctx.stroke(coastPath);
     }
 
     // Sweep — centre pivot, covers the whole rectangular map
@@ -2801,16 +2802,7 @@
   function startHlsPlayback(hlsUrl) {
     destroyActiveHls();
 
-    // 1. Native HLS for iPad Safari / iOS / Safari
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = hlsUrl;
-      video.muted = false;
-      if (video.volume === 0) video.volume = 0.85;
-      video.play().catch(function () {});
-      return;
-    }
-
-    // 2. hls.js for Chrome, Edge, Firefox on PC & Android
+    // 1. hls.js for Chrome, Edge, Firefox on PC & Android (MSE supported)
     if (typeof Hls !== "undefined" && Hls.isSupported()) {
       var hls = new Hls({
         debug: false,
@@ -2866,12 +2858,23 @@
           }
         }
       });
-    } else {
+      return;
+    }
+
+    // 2. Native HLS for iPad Safari / iOS / Safari (where MSE is not supported for HLS)
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = hlsUrl;
       video.muted = false;
       if (video.volume === 0) video.volume = 0.85;
       video.play().catch(function () {});
+      return;
     }
+
+    // Fallback: direct src assignment
+    video.src = hlsUrl;
+    video.muted = false;
+    if (video.volume === 0) video.volume = 0.85;
+    video.play().catch(function () {});
   }
 
   function playTorrentInPlayer(infoHash) {
@@ -2891,12 +2894,21 @@
     container.classList.add("has-media");
 
     var isMkv = false;
+    var candNames = [];
     if (t) {
-      var n = (t.activeFileName || t.name || "").toLowerCase();
-      if (n.endsWith(".mkv") || n.endsWith(".avi") || n.endsWith(".ts")) isMkv = true;
-      if (!isMkv && t.files && t.files.length > 0) {
-        var fn = (t.files[0].name || "").toLowerCase();
-        if (fn.endsWith(".mkv") || fn.endsWith(".avi") || fn.endsWith(".ts")) isMkv = true;
+      if (t.activeFileName) candNames.push(t.activeFileName);
+      if (t.name) candNames.push(t.name);
+      if (t.files && t.files.length) {
+        t.files.forEach(function (f) { if (f.name) candNames.push(f.name); });
+      }
+    }
+    if (currentMagnet && currentMagnet.dn) candNames.push(currentMagnet.dn);
+
+    for (var i = 0; i < candNames.length; i++) {
+      var n = (candNames[i] || "").toLowerCase();
+      if (n.endsWith(".mkv") || n.endsWith(".avi") || n.endsWith(".ts")) {
+        isMkv = true;
+        break;
       }
     }
 
@@ -3617,16 +3629,23 @@
         setText("client1Sub", currentTitle);
         setNowPlaying(currentTitle, (d ? d + " · " : "") + toMbps(active.downloadSpeed || 0).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers");
         setText("videoTitle", currentTitle);
-        if (active.activeFileName) {
-          setText("activeFileName", active.activeFileName);
-          var lowerName = active.activeFileName.toLowerCase();
-          var isMkvFile = lowerName.endsWith(".mkv") || lowerName.endsWith(".avi") || lowerName.endsWith(".ts");
-          if (isMkvFile) {
-            var hlsUrl = getApiUrl("/hls/" + (active.infoHash || currentHash) + "/master.m3u8");
-            if (container.classList.contains("has-media") && (!currentStreamUrl || !currentStreamUrl.includes("/hls/"))) {
-              currentStreamUrl = hlsUrl;
-              startHlsPlayback(hlsUrl);
-            }
+        if (active.activeFileName) setText("activeFileName", active.activeFileName);
+        var isMkvFile = false;
+        var candNames = [active.activeFileName, active.name];
+        if (active.files && active.files.length) {
+          active.files.forEach(function (f) { if (f.name) candNames.push(f.name); });
+        }
+        for (var i = 0; i < candNames.length; i++) {
+          var cn = (candNames[i] || "").toLowerCase();
+          if (cn.endsWith(".mkv") || cn.endsWith(".avi") || cn.endsWith(".ts")) { isMkvFile = true; break; }
+        }
+        if (isMkvFile) {
+          var hlsUrl = getApiUrl("/hls/" + (active.infoHash || currentHash) + "/master.m3u8");
+          if (!currentStreamUrl || !currentStreamUrl.includes("/hls/") || !activeHls) {
+            currentStreamUrl = hlsUrl;
+            $("emptyPlayerState").style.display = "none";
+            container.classList.add("has-media");
+            startHlsPlayback(hlsUrl);
           }
         }
       }
@@ -3674,21 +3693,28 @@
         (details ? details + " · " : "") +
         toMbps(active.downloadSpeed).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers");
       setText("videoTitle", displayTitle);
-      if (active.activeFileName) {
-        setText("activeFileName", active.activeFileName);
-        var lowerName = active.activeFileName.toLowerCase();
-        var isMkvFile = lowerName.endsWith(".mkv") || lowerName.endsWith(".avi") || lowerName.endsWith(".ts");
-        if (isMkvFile) {
-          var hlsUrl = getApiUrl("/hls/" + (active.infoHash || currentHash) + "/master.m3u8");
-          if (container.classList.contains("has-media") && (!currentStreamUrl || !currentStreamUrl.includes("/hls/"))) {
-            currentStreamUrl = hlsUrl;
-            startHlsPlayback(hlsUrl);
-          }
+      if (active.activeFileName) setText("activeFileName", active.activeFileName);
+      var isMkvFile = false;
+      var candNames = [active.activeFileName, active.name];
+      if (active.files && active.files.length) {
+        active.files.forEach(function (f) { if (f.name) candNames.push(f.name); });
+      }
+      for (var i = 0; i < candNames.length; i++) {
+        var cn = (candNames[i] || "").toLowerCase();
+        if (cn.endsWith(".mkv") || cn.endsWith(".avi") || cn.endsWith(".ts")) { isMkvFile = true; break; }
+      }
+      if (isMkvFile) {
+        var hlsUrl = getApiUrl("/hls/" + (active.infoHash || currentHash) + "/master.m3u8");
+        if (!currentStreamUrl || !currentStreamUrl.includes("/hls/") || !activeHls) {
+          currentStreamUrl = hlsUrl;
+          $("emptyPlayerState").style.display = "none";
+          container.classList.add("has-media");
+          startHlsPlayback(hlsUrl);
         }
       }
 
       // If active torrent is ready with files, ensure player has src attached (for MP4/direct streams)
-      if (!activeHls && active.ready && currentStreamUrl && (!video.src || video.src === "" || video.error)) {
+      if (!isMkvFile && !activeHls && active.ready && currentStreamUrl && (!video.src || video.src === "" || video.error)) {
         if (!container.classList.contains("paused")) {
           video.src = currentStreamUrl;
           video.play().catch(function () {});
@@ -3802,27 +3828,18 @@
       if (!data.success || !data.torrent) throw new Error("add failed");
       var t = data.torrent;
       currentHash = t.infoHash ? t.infoHash.toLowerCase() : currentHash;
-      currentStreamUrl = getApiUrl("/stream/" + currentHash);
       if (t.cleanTitle && !t.cleanTitle.includes("Resolving metadata")) {
         currentTitle = t.cleanTitle;
       } else if (t.name && !t.name.includes("Resolving metadata")) {
         currentTitle = cleanTitle(t.name);
       }
-      $("emptyPlayerState").style.display = "none";
-      container.classList.add("has-media");
-      video.src = currentStreamUrl;
-      video.muted = false;
-      if (video.volume === 0) video.volume = 0.85;
-      syncVolumeUI();
-      video.play().catch(function () {});
-      setText("videoStatus", "Streaming");
       setText("videoTitle", currentTitle);
       setNowPlaying(currentTitle,
         extractDetails(t.name || currentMagnet.dn || "") || t.activeFileName || "Streaming from peers");
       if (t.activeFileName) setText("activeFileName", t.activeFileName);
       toast("Streaming " + currentTitle);
       showHud();
-      syncNowPlayingControls();
+      playTorrentInPlayer(currentHash);
 
       // Refresh WS subscription with confirmed infoHash
       if (activeWs && activeWs.readyState === WebSocket.OPEN && currentHash) {

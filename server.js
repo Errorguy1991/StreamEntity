@@ -319,6 +319,20 @@ app.get('/hls/:infoHash/master.m3u8', async (req, res) => {
   }
 
   try {
+    const masterOnDisk = path.join(hlsManager.hlsBaseDir, normalizedHash, 'master.m3u8');
+    if (fs.existsSync(masterOnDisk)) {
+      const session = hlsManager.getSession(normalizedHash);
+      const content = session ? session.getMasterPlaylistContent() : fs.readFileSync(masterOnDisk, 'utf8');
+      if (content) {
+        res.set({
+          'Content-Type': 'application/vnd.apple.mpegurl',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Access-Control-Allow-Origin': '*'
+        });
+        return res.send(content);
+      }
+    }
+
     const session = await hlsManager.getOrCreateSession(normalizedHash, engine, fileIndex);
     if (session.status !== 'ready') {
       await session.readyPromise;
@@ -345,10 +359,16 @@ app.get('/hls/:infoHash/:file', (req, res) => {
   const { infoHash, file } = req.params;
   const normalizedHash = String(infoHash || '').toLowerCase().trim();
   const session = hlsManager.getSession(normalizedHash);
-  const filePath = path.join(hlsManager.hlsBaseDir, normalizedHash, path.basename(file));
+  let filePath = path.join(hlsManager.hlsBaseDir, normalizedHash, path.basename(file));
 
   if (!fs.existsSync(filePath)) {
-    return res.status(404).send('File not found');
+    // Fallback if ffmpeg wrote init segments to working dir
+    const cwdFallback = path.join(__dirname, path.basename(file));
+    if (fs.existsSync(cwdFallback)) {
+      filePath = cwdFallback;
+    } else {
+      return res.status(404).send('File not found');
+    }
   }
 
   if (session) {
@@ -358,11 +378,14 @@ app.get('/hls/:infoHash/:file', (req, res) => {
   const ext = path.extname(file).toLowerCase();
   let contentType = 'application/octet-stream';
   if (ext === '.m3u8') contentType = 'application/vnd.apple.mpegurl';
+  else if (ext === '.m4s') contentType = 'video/iso.segment';
+  else if (ext === '.mp4') contentType = 'video/mp4';
   else if (ext === '.ts') contentType = 'video/mp2t';
   else if (ext === '.vtt') contentType = 'text/vtt';
 
   res.set({
     'Content-Type': contentType,
+    'Accept-Ranges': 'bytes',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Range',
     'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'

@@ -95,9 +95,12 @@ export class PieceScheduler {
    * Check if a specific piece is verified and completed
    */
   isPieceDone(pieceIndex) {
-    if (!this.torrent || !this.torrent.pieces) return false;
-    const piece = this.torrent.pieces[pieceIndex];
-    return piece && (piece.length === 0 || (piece.missing === 0));
+    if (!this.torrent) return false;
+    if (this.torrent.bitfield && typeof this.torrent.bitfield.get === 'function') {
+      return Boolean(this.torrent.bitfield.get(pieceIndex));
+    }
+    const piece = this.torrent.pieces ? this.torrent.pieces[pieceIndex] : null;
+    return Boolean(piece && (piece.length === 0 || piece.missing === 0));
   }
 
   /**

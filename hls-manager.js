@@ -60,8 +60,14 @@ export class HlsManager {
     const key = String(infoHash || '').toLowerCase().trim();
     if (this.sessions.has(key)) {
       const s = this.sessions.get(key);
-      s.lastAccess = Date.now();
-      return s;
+      if (s.status === 'error' || (s.ffmpegProc && s.ffmpegProc.exitCode !== null && s.ffmpegProc.exitCode !== 0)) {
+        console.log(`[HlsManager] Clearing failed session for ${key} to reinitialize...`);
+        this.sessions.delete(key);
+        s.destroy().catch(() => {});
+      } else {
+        s.lastAccess = Date.now();
+        return s;
+      }
     }
 
     const session = new HlsSession(key, this, engine, preferredFileIndex);
@@ -306,7 +312,7 @@ class HlsSession {
       fra: 'French', ger: 'German', deu: 'German', jpn: 'Japanese', kor: 'Korean',
       chi: 'Chinese', zho: 'Chinese', rus: 'Russian', por: 'Portuguese', tam: 'Tamil', tel: 'Telugu'
     };
-    return names[lang] || `Audio Track ${idx + 1}`;
+    return names[lang] || `Audio_${idx + 1}`;
   }
 
   formatSubtitleTitle(lang, idx) {
@@ -319,13 +325,18 @@ class HlsSession {
   }
 
   async extractSubtitles(subs) {
+    const textSubCodecs = ['subrip', 'ass', 'ssa', 'webvtt', 'mov_text'];
     for (let i = 0; i < subs.length; i++) {
       const sub = subs[i];
+      if (!textSubCodecs.includes((sub.codec || '').toLowerCase())) {
+        continue; // Skip bitmap/PGS subtitles that fail ffmpeg webvtt conversion
+      }
       const vttOut = path.join(this.dir, `sub_${i}.vtt`);
       const plOut = path.join(this.dir, `sub_${i}.m3u8`);
 
       try {
         const p = spawn('ffmpeg', [
+          '-hide_banner', '-loglevel', 'error',
           '-y',
           '-i', this.diskPath,
           '-map', `0:${sub.index}`,
@@ -380,8 +391,9 @@ class HlsSession {
     args.push(
       '-hls_time', '6',
       '-hls_playlist_type', 'event',
-      '-hls_segment_type', 'mpegts',
-      '-hls_flags', 'temp_file+independent_segments',
+      '-hls_segment_type', 'fmp4',
+      '-hls_fmp4_init_filename', 'init_%v.mp4',
+      '-hls_flags', 'independent_segments',
       '-master_pl_name', 'master.m3u8'
     );
 
@@ -389,14 +401,14 @@ class HlsSession {
     audioList.forEach((a, idx) => {
       const isDef = idx === 0 ? 'default:yes' : 'default:no';
       const cleanLang = (a.language || 'und').replace(/[^a-z0-9]/gi, '');
-      const cleanName = (a.title || `Audio ${idx + 1}`).replace(/[",:]/g, '');
+      const cleanName = (a.title || `Audio_${idx + 1}`).replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '');
       varMap += ` a:${idx},agroup:aud,language:${cleanLang},name:${cleanName},${isDef}`;
     });
 
     args.push('-var_stream_map', varMap);
     args.push(path.join(this.dir, 'stream_%v.m3u8'));
 
-    const proc = spawn('ffmpeg', args);
+    const proc = spawn('ffmpeg', args, { cwd: this.dir });
     this.ffmpegProc = proc;
 
     proc.stderr.on('data', (d) => {
@@ -431,9 +443,11 @@ class HlsSession {
         if (fs.existsSync(this.masterPath)) {
           try {
             const files = fs.readdirSync(this.dir);
+            const hasInit = files.some(f => f.startsWith('init_') && f.endsWith('.mp4'));
+            const hasM4s = files.some(f => f.endsWith('.m4s'));
             const hasTs = files.some(f => f.endsWith('.ts'));
             const hasSubM3u8 = files.some(f => f.startsWith('stream_') && f.endsWith('.m3u8'));
-            if (hasTs || hasSubM3u8) {
+            if ((hasInit && hasM4s) || hasTs || hasSubM3u8) {
               return resolve();
             }
           } catch (e) {}
@@ -489,7 +503,7 @@ class HlsSession {
         const files = fs.readdirSync(this.dir);
         let maxSeg = -1;
         for (const f of files) {
-          const m = f.match(/stream_0_(\d+)\.ts$/);
+          const m = f.match(/stream_0.*?(\d+)\.(m4s|ts|mp4)$/);
           if (m) {
             const segIdx = parseInt(m[1], 10);
             if (segIdx > maxSeg) maxSeg = segIdx;

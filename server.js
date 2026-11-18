@@ -1,6 +1,7 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
@@ -9,6 +10,7 @@ import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
 import { StreamEntityEngine } from './engine.js';
 import { launchVlc, getVlcPath } from './vlc-launcher.js';
+import { HlsManager } from './hls-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,16 +57,25 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(__dirname));
 
+const engine = new StreamEntityEngine();
+const hlsManager = new HlsManager();
+
 // Health check endpoint for cloud deploy checks & latency verification
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', engine: 'StreamEntity', version: '1.0.0', uptime: process.uptime() });
+  res.json({
+    status: 'ok',
+    engine: 'StreamEntity',
+    version: '1.0.0',
+    uptime: process.uptime(),
+    ffmpeg: hlsManager.ffmpegInfo.ffmpeg,
+    ffprobe: hlsManager.ffmpegInfo.ffprobe,
+    ffmpegVersion: hlsManager.ffmpegInfo.version
+  });
 });
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
-
-const engine = new StreamEntityEngine();
 
 // Demo test streams (Open Creative Commons Blender Movies with high seed counts)
 export const DEMO_STREAMS = [
@@ -140,6 +151,7 @@ app.delete('/api/torrents/:infoHash', async (req, res) => {
   try {
     const { infoHash } = req.params;
     const { deleteFiles } = req.query;
+    await hlsManager.stopSession(infoHash);
     const success = await engine.removeTorrent(infoHash, deleteFiles === 'true');
     res.json({ success });
   } catch (err) {
@@ -270,6 +282,96 @@ app.get('/api/vlc/status', (req, res) => {
 });
 
 // ==========================================
+// HLS Native Transmuxing & Session Routes
+// ==========================================
+
+// Diagnostic status for player and health monitors
+app.get('/api/hls/:infoHash/status', (req, res) => {
+  const session = hlsManager.getSession(req.params.infoHash);
+  if (!session) {
+    return res.json({ status: 'idle', ffmpeg: hlsManager.ffmpegInfo });
+  }
+  res.json({
+    status: session.status,
+    lastError: session.lastError,
+    probed: session.probed,
+    uptime: Math.floor((Date.now() - session.created) / 1000),
+    ffmpeg: hlsManager.ffmpegInfo
+  });
+});
+
+// Master playlist route (.m3u8)
+app.get('/hls/:infoHash/master.m3u8', async (req, res) => {
+  const { infoHash } = req.params;
+  const normalizedHash = String(infoHash || '').toLowerCase().trim();
+  const fileIndex = req.query.fileIndex !== undefined ? parseInt(req.query.fileIndex, 10) : undefined;
+
+  if (!hlsManager.ffmpegInfo.ffmpeg) {
+    return res.status(503).json({
+      error: 'ffmpeg not installed — install it from ffmpeg.org and restart'
+    });
+  }
+
+  try {
+    const session = await hlsManager.getOrCreateSession(normalizedHash, engine, fileIndex);
+    if (session.status !== 'ready') {
+      await session.readyPromise;
+    }
+
+    const content = session.getMasterPlaylistContent();
+    if (!content) {
+      return res.status(404).send('Master playlist not found');
+    }
+
+    res.set({
+      'Content-Type': 'application/vnd.apple.mpegurl',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.send(content);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// HLS static/segment serving (.ts, .vtt, variant .m3u8)
+app.get('/hls/:infoHash/:file', (req, res) => {
+  const { infoHash, file } = req.params;
+  const normalizedHash = String(infoHash || '').toLowerCase().trim();
+  const session = hlsManager.getSession(normalizedHash);
+  const filePath = path.join(hlsManager.hlsBaseDir, normalizedHash, path.basename(file));
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('File not found');
+  }
+
+  if (session) {
+    session.lastAccess = Date.now();
+  }
+
+  const ext = path.extname(file).toLowerCase();
+  let contentType = 'application/octet-stream';
+  if (ext === '.m3u8') contentType = 'application/vnd.apple.mpegurl';
+  else if (ext === '.ts') contentType = 'video/mp2t';
+  else if (ext === '.vtt') contentType = 'text/vtt';
+
+  res.set({
+    'Content-Type': contentType,
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Range',
+    'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'
+  });
+
+  if (ext === '.m3u8') {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  } else {
+    res.set('Cache-Control', 'public, max-age=3600');
+  }
+
+  res.sendFile(filePath);
+});
+
+// ==========================================
 // HTTP Range Video Streaming (HTTP 206)
 // ==========================================
 
@@ -287,10 +389,15 @@ app.all(['/stream/:infoHash', '/stream/:infoHash/:fileIndex'], async (req, res) 
   if (!ctx.file && ctx.torrent) {
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, 30000);
-      ctx.torrent.once('metadata', () => {
+      if (typeof ctx.torrent.once === 'function') {
+        ctx.torrent.once('metadata', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      } else {
         clearTimeout(timer);
         resolve();
-      });
+      }
     });
     ctx = engine.getStreamingContext(normalizedHash, parsedFileIndex);
   }
@@ -301,6 +408,18 @@ app.all(['/stream/:infoHash', '/stream/:infoHash/:fileIndex'], async (req, res) 
   }
 
   lastActiveInfoHash = normalizedHash;
+
+  const isMkv = file.name.toLowerCase().endsWith('.mkv');
+  const isRaw = req.query.raw === 'true';
+  const ua = (req.headers['user-agent'] || '').toLowerCase();
+  const isExternalPlayer = isRaw || ua.includes('vlc') || ua.includes('mpv') || ua.includes('potplayer') || ua.includes('kodi') || ua.includes('iina') || ua.includes('infuse') || ua.includes('outplayer');
+
+  if (isMkv && !isExternalPlayer) {
+    if (!hlsManager.ffmpegInfo.ffmpeg) {
+      return res.status(503).json({ error: 'ffmpeg not installed — install it from ffmpeg.org and restart' });
+    }
+    return res.redirect(`/hls/${normalizedHash}/master.m3u8`);
+  }
 
   const mimeType = mime.lookup(file.name) || 'video/mp4';
   const totalSize = file.length;
@@ -562,3 +681,10 @@ server.listen(PORT, '0.0.0.0', async () => {
     console.error('Failed to generate terminal QR code:', err);
   }
 });
+
+const shutdown = async () => {
+  try { await hlsManager.destroyAll(); } catch (e) {}
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

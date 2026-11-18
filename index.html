@@ -1644,6 +1644,7 @@
      polygons from the supplied mapData.js, converted to code (one
      path, country borders included) in assets/worldmap.js -->
 <script src="assets/worldmap.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
 <script>
 (function () {
   "use strict";
@@ -2786,22 +2787,130 @@
     syncNowPlayingControls();
   }
 
+  var activeHls = null;
+
+  function destroyActiveHls() {
+    if (activeHls) {
+      try {
+        activeHls.destroy();
+      } catch (e) {}
+      activeHls = null;
+    }
+  }
+
+  function startHlsPlayback(hlsUrl) {
+    destroyActiveHls();
+
+    // 1. Native HLS for iPad Safari / iOS / Safari
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = hlsUrl;
+      video.muted = false;
+      if (video.volume === 0) video.volume = 0.85;
+      video.play().catch(function () {});
+      return;
+    }
+
+    // 2. hls.js for Chrome, Edge, Firefox on PC & Android
+    if (typeof Hls !== "undefined" && Hls.isSupported()) {
+      var hls = new Hls({
+        debug: false,
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 90
+      });
+      activeHls = hls;
+
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, function () {
+        video.muted = false;
+        if (video.volume === 0) video.volume = 0.85;
+        video.play().catch(function () {});
+      });
+
+      hls.on(Hls.Events.AUDIO_TRACK_LOADED, function () {
+        if (trackMenuKind === "audio") openTrackMenu("audio");
+      });
+
+      hls.on(Hls.Events.SUBTITLE_TRACK_LOADED, function () {
+        if (trackMenuKind === "subtitle") openTrackMenu("subtitle");
+      });
+
+      hls.on(Hls.Events.ERROR, function (event, data) {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              // Check backend for explicit error message (e.g. ffmpeg missing or probe failed)
+              fetch(getApiUrl("/api/hls/" + currentHash + "/status"))
+                .then(function (r) { return r.json(); })
+                .then(function (st) {
+                  if (st && st.lastError) {
+                    toast(st.lastError);
+                    showCodecFallback("HLS Transcoder Notice", st.lastError);
+                  } else {
+                    hls.startLoad();
+                  }
+                })
+                .catch(function () {
+                  hls.startLoad();
+                });
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError();
+              break;
+            default:
+              destroyActiveHls();
+              showCodecFallback("Playback Notice", "HLS playback stopped. Tap below to stream directly in VLC or Infuse.");
+              break;
+          }
+        }
+      });
+    } else {
+      video.src = hlsUrl;
+      video.muted = false;
+      if (video.volume === 0) video.volume = 0.85;
+      video.play().catch(function () {});
+    }
+  }
+
   function playTorrentInPlayer(infoHash) {
     if (!infoHash) return;
     currentHash = infoHash;
+    hideCodecFallback();
+    destroyActiveHls();
+
     var t = latestTorrents ? latestTorrents.find(function (x) { return x.infoHash && x.infoHash.toLowerCase() === infoHash.toLowerCase(); }) : null;
     if (t && (t.cleanTitle || t.name)) {
       currentTitle = t.cleanTitle || cleanTitle(t.name);
     }
     setText("videoTitle", currentTitle);
     setNowPlaying(currentTitle, t && t.name ? extractDetails(t.name) : "Connecting to stream…");
-    currentStreamUrl = getApiUrl("/stream/" + currentHash);
+
     $("emptyPlayerState").style.display = "none";
     container.classList.add("has-media");
-    video.src = currentStreamUrl;
-    video.muted = false;
-    if (video.volume === 0) video.volume = 0.85;
-    video.play().catch(function () {});
+
+    var isMkv = false;
+    if (t) {
+      var n = (t.activeFileName || t.name || "").toLowerCase();
+      if (n.endsWith(".mkv") || n.endsWith(".avi") || n.endsWith(".ts")) isMkv = true;
+      if (!isMkv && t.files && t.files.length > 0) {
+        var fn = (t.files[0].name || "").toLowerCase();
+        if (fn.endsWith(".mkv") || fn.endsWith(".avi") || fn.endsWith(".ts")) isMkv = true;
+      }
+    }
+
+    if (isMkv) {
+      currentStreamUrl = getApiUrl("/hls/" + currentHash + "/master.m3u8");
+      startHlsPlayback(currentStreamUrl);
+    } else {
+      currentStreamUrl = getApiUrl("/stream/" + currentHash);
+      video.src = currentStreamUrl;
+      video.muted = false;
+      if (video.volume === 0) video.volume = 0.85;
+      video.play().catch(function () {});
+    }
+
     setText("videoStatus", "Streaming");
     $("videoStatus").classList.remove("idle");
     syncNowPlayingControls();
@@ -2823,6 +2932,7 @@
     var hashToRemove = specificHash || currentHash || (latestTorrents && latestTorrents[0] ? latestTorrents[0].infoHash : null);
     if (!specificHash || specificHash === currentHash) {
       clearTimeout(hudTimer);
+      destroyActiveHls();
       hideCodecFallback();
       video.pause();
       video.removeAttribute("src");
@@ -2892,10 +3002,41 @@
     var err = video.error;
     console.warn("Video playback error:", err);
     if (!currentStreamUrl) return;
-    if (err && err.code === 4) {
-      showCodecFallback("Codec / Container Not Supported", "This browser cannot decode this video format (MKV / 4K x265). StreamEntity is actively serving the media file over LAN. Tap below to watch in <strong>VLC</strong> or <strong>Infuse</strong>:");
+
+    if (currentHash) {
+      fetch(getApiUrl("/api/hls/" + currentHash + "/status"))
+        .then(function (r) { return r.json(); })
+        .then(function (st) {
+          if (st && st.lastError) {
+            toast(st.lastError);
+            showCodecFallback("Transcoding Notice", st.lastError);
+            return;
+          }
+          if (st && st.ffmpeg && !st.ffmpeg.ffmpeg) {
+            var msg = "ffmpeg not installed — install it from ffmpeg.org and restart";
+            toast(msg);
+            showCodecFallback("FFmpeg Required", msg);
+            return;
+          }
+          if (err && err.code === 4) {
+            showCodecFallback("Codec / Container Not Supported", "This browser cannot decode this video format (MKV / 4K x265). StreamEntity is actively serving the media file over LAN. Tap below to watch in <strong>VLC</strong> or <strong>Infuse</strong>:");
+          } else {
+            toast("Video buffering from swarm peers… please wait a few seconds.");
+          }
+        })
+        .catch(function () {
+          if (err && err.code === 4) {
+            showCodecFallback("Codec / Container Not Supported", "This browser cannot decode this video format (MKV / 4K x265). StreamEntity is actively serving the media file over LAN. Tap below to watch in <strong>VLC</strong> or <strong>Infuse</strong>:");
+          } else {
+            toast("Video buffering from swarm peers… please wait a few seconds.");
+          }
+        });
     } else {
-      toast("Video buffering from swarm peers… please wait a few seconds.");
+      if (err && err.code === 4) {
+        showCodecFallback("Codec / Container Not Supported", "This browser cannot decode this video format (MKV / 4K x265). StreamEntity is actively serving the media file over LAN. Tap below to watch in <strong>VLC</strong> or <strong>Infuse</strong>:");
+      } else {
+        toast("Video buffering from swarm peers… please wait a few seconds.");
+      }
     }
   });
 
@@ -3023,40 +3164,72 @@
     }
 
     if (kind === "audio") {
-      var at = video.audioTracks;
-      if (!at || at.length === 0) {
-        addEmpty("No audio tracks — this stream exposes a single default audio track, played through the volume controls.");
-      } else {
-        for (var i = 0; i < at.length; i++) {
+      if (activeHls && activeHls.audioTracks && activeHls.audioTracks.length > 0) {
+        var hTracks = activeHls.audioTracks;
+        for (var i = 0; i < hTracks.length; i++) {
           (function (idx) {
-            addRow(trackLabel(at[idx], "Audio", idx), !!at[idx].enabled, function () {
-              for (var j = 0; j < at.length; j++) at[j].enabled = (j === idx);
-              toast("Audio track: " + trackLabel(at[idx], "Audio", idx));
+            var trk = hTracks[idx];
+            var label = trk.name || trk.lang || ("Audio " + (idx + 1));
+            var isSel = (activeHls.audioTrack === idx);
+            addRow(label, isSel, function () {
+              activeHls.audioTrack = idx;
+              toast("Audio track: " + label);
             });
           })(i);
         }
+      } else {
+        var at = video.audioTracks;
+        if (!at || at.length === 0) {
+          addEmpty("No audio tracks — this stream exposes a single default audio track, played through the volume controls.");
+        } else {
+          for (var i = 0; i < at.length; i++) {
+            (function (idx) {
+              addRow(trackLabel(at[idx], "Audio", idx), !!at[idx].enabled, function () {
+                for (var j = 0; j < at.length; j++) at[j].enabled = (j === idx);
+                toast("Audio track: " + trackLabel(at[idx], "Audio", idx));
+              });
+            })(i);
+          }
+        }
       }
     } else {
-      var tt = video.textTracks;
-      var subs = [];
-      if (tt) for (var k = 0; k < tt.length; k++) {
-        if (tt[k].kind === "subtitles" || tt[k].kind === "captions") subs.push(tt[k]);
-      }
-      if (subs.length === 0) {
-        addEmpty("No subtitles — this stream has no subtitle or caption tracks.");
-      } else {
-        var anyShowing = subs.some(function (t) { return t.mode === "showing"; });
-        addRow("Off", !anyShowing, function () {
-          subs.forEach(function (t) { t.mode = "disabled"; });
+      if (activeHls && activeHls.subtitleTracks && activeHls.subtitleTracks.length > 0) {
+        var sTracks = activeHls.subtitleTracks;
+        var curSub = activeHls.subtitleTrack;
+        addRow("Off", curSub === -1, function () {
+          activeHls.subtitleTrack = -1;
           toast("Subtitles off");
         });
-        subs.forEach(function (t, idx) {
-          addRow(trackLabel(t, "Subtitle", idx), t.mode === "showing", function () {
-            subs.forEach(function (o) { o.mode = "disabled"; });
-            t.mode = "showing";
-            toast("Subtitles: " + trackLabel(t, "Subtitle", idx));
+        sTracks.forEach(function (trk, idx) {
+          var label = trk.name || trk.lang || ("Subtitle " + (idx + 1));
+          var isSel = (curSub === idx);
+          addRow(label, isSel, function () {
+            activeHls.subtitleTrack = idx;
+            toast("Subtitles: " + label);
           });
         });
+      } else {
+        var tt = video.textTracks;
+        var subs = [];
+        if (tt) for (var k = 0; k < tt.length; k++) {
+          if (tt[k].kind === "subtitles" || tt[k].kind === "captions") subs.push(tt[k]);
+        }
+        if (subs.length === 0) {
+          addEmpty("No subtitles — this stream has no subtitle or caption tracks.");
+        } else {
+          var anyShowing = subs.some(function (t) { return t.mode === "showing"; });
+          addRow("Off", !anyShowing, function () {
+            subs.forEach(function (t) { t.mode = "disabled"; });
+            toast("Subtitles off");
+          });
+          subs.forEach(function (t, idx) {
+            addRow(trackLabel(t, "Subtitle", idx), t.mode === "showing", function () {
+              subs.forEach(function (o) { o.mode = "disabled"; });
+              t.mode = "showing";
+              toast("Subtitles: " + trackLabel(t, "Subtitle", idx));
+            });
+          });
+        }
       }
     }
     menu.classList.remove("hidden");
@@ -3097,6 +3270,12 @@
     return window.location.origin + (currentStreamUrl.startsWith("/") ? currentStreamUrl : "/" + currentStreamUrl);
   }
 
+  function getRawStreamUrl() {
+    if (!currentHash) return "";
+    var base = getBackendBase() || window.location.origin;
+    return base.replace(/\/+$/, "") + "/stream/" + currentHash + "?raw=true";
+  }
+
   function showCodecFallback(badgeText, descText) {
     var overlay = $("codecFallbackOverlay");
     if (!overlay) return;
@@ -3110,7 +3289,7 @@
     }
     if ($("btnOverlayInfuse")) {
       $("btnOverlayInfuse").onclick = function () {
-        var u = getAbsoluteStreamUrl();
+        var u = getRawStreamUrl() || getAbsoluteStreamUrl();
         if (!u) return;
         var infuseUrl = "infuse://x-callback-url/play?url=" + encodeURIComponent(u);
         window.location.href = infuseUrl;
@@ -3128,15 +3307,16 @@
 
   function hideCodecFallback() {
     var overlay = $("codecFallbackOverlay");
-    if (overlay) overlay.classList.add("hidden");
+    if (!overlay) return;
+    overlay.classList.add("hidden");
   }
 
   $("btnCopyStream").addEventListener("click", function () {
-    var absUrl = getAbsoluteStreamUrl();
+    var absUrl = getRawStreamUrl() || getAbsoluteStreamUrl();
     copyText(absUrl, "Stream URL copied — paste it into VLC, Infuse, MPV, or Outplayer");
   });
   $("btnOpenVlc").addEventListener("click", function () {
-    var absUrl = getAbsoluteStreamUrl();
+    var absUrl = getRawStreamUrl() || getAbsoluteStreamUrl();
     if (!absUrl) { toast("Nothing to open yet — start a stream first"); return; }
     // Only open VLC on the current client device (e.g. iPad / mobile / local browser via protocol handler)
     // Never trigger server-side VLC launch on the host PC.
@@ -3440,8 +3620,13 @@
         if (active.activeFileName) {
           setText("activeFileName", active.activeFileName);
           var lowerName = active.activeFileName.toLowerCase();
-          if (lowerName.endsWith(".mkv") || lowerName.endsWith(".avi") || lowerName.endsWith(".ts")) {
-            showCodecFallback("MKV / 4K HEVC Container", "Web browsers (Safari/Chrome) cannot decode <strong>.mkv</strong> containers natively. Your local StreamEntity engine is actively connected to swarm peers and serving over LAN. Tap below to stream smoothly in <strong>VLC</strong> or <strong>Infuse</strong>:");
+          var isMkvFile = lowerName.endsWith(".mkv") || lowerName.endsWith(".avi") || lowerName.endsWith(".ts");
+          if (isMkvFile) {
+            var hlsUrl = getApiUrl("/hls/" + (active.infoHash || currentHash) + "/master.m3u8");
+            if (container.classList.contains("has-media") && (!currentStreamUrl || !currentStreamUrl.includes("/hls/"))) {
+              currentStreamUrl = hlsUrl;
+              startHlsPlayback(hlsUrl);
+            }
           }
         }
       }
@@ -3492,13 +3677,18 @@
       if (active.activeFileName) {
         setText("activeFileName", active.activeFileName);
         var lowerName = active.activeFileName.toLowerCase();
-        if (lowerName.endsWith(".mkv") || lowerName.endsWith(".avi") || lowerName.endsWith(".ts")) {
-          showCodecFallback("MKV / 4K HEVC Container", "Web browsers (Safari/Chrome) cannot decode <strong>.mkv</strong> containers natively. Your local StreamEntity engine is actively connected to swarm peers and serving over LAN. Tap below to stream smoothly in <strong>VLC</strong> or <strong>Infuse</strong>:");
+        var isMkvFile = lowerName.endsWith(".mkv") || lowerName.endsWith(".avi") || lowerName.endsWith(".ts");
+        if (isMkvFile) {
+          var hlsUrl = getApiUrl("/hls/" + (active.infoHash || currentHash) + "/master.m3u8");
+          if (container.classList.contains("has-media") && (!currentStreamUrl || !currentStreamUrl.includes("/hls/"))) {
+            currentStreamUrl = hlsUrl;
+            startHlsPlayback(hlsUrl);
+          }
         }
       }
 
-      // If active torrent is ready with files, ensure player has src attached
-      if (active.ready && currentStreamUrl && (!video.src || video.src === "" || video.error)) {
+      // If active torrent is ready with files, ensure player has src attached (for MP4/direct streams)
+      if (!activeHls && active.ready && currentStreamUrl && (!video.src || video.src === "" || video.error)) {
         if (!container.classList.contains("paused")) {
           video.src = currentStreamUrl;
           video.play().catch(function () {});

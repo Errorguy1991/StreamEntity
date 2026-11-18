@@ -3,6 +3,7 @@ import http from 'http';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
 import mime from 'mime-types';
 import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
@@ -11,6 +12,9 @@ import { launchVlc, getVlcPath } from './vlc-launcher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Track the active stream hash across clients & WebSocket broadcasts
+let lastActiveInfoHash = null;
 
 // Robust process crash guards for client disconnects & stream aborts
 process.on('uncaughtException', (err) => {
@@ -122,6 +126,9 @@ app.post('/api/torrents/add', async (req, res) => {
     }
 
     const summary = await engine.addTorrent(torrentId.trim(), { fileIndex });
+    if (summary?.infoHash) {
+      lastActiveInfoHash = summary.infoHash;
+    }
     res.json({ success: true, torrent: summary });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -292,6 +299,66 @@ app.all(['/stream/:infoHash', '/stream/:infoHash/:fileIndex'], async (req, res) 
     return res.status(503).send('Stream file metadata is resolving. Please wait for swarm peers.');
   }
 
+  lastActiveInfoHash = infoHash;
+
+  const isMkv = file.name.toLowerCase().endsWith('.mkv');
+  const userAgent = req.headers['user-agent'] || '';
+  const isVlcOrExternal = userAgent.includes('VLC') || userAgent.includes('mpv') || userAgent.includes('PotPlayer') || req.query.raw === 'true';
+
+  // If this is an MKV file requested by a browser, transmux on-the-fly to Fragmented MP4 (H.264/HEVC stream copy + AAC audio)
+  if (isMkv && !isVlcOrExternal) {
+    if (ctx.scheduler) {
+      ctx.scheduler.updatePlayhead(0);
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'video/mp4',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Range',
+      'Connection': 'keep-alive'
+    });
+
+    const fileStream = file.createReadStream();
+
+    const ffmpeg = spawn('ffmpeg', [
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-i', 'pipe:0',
+      '-map', '0:v:0',
+      '-map', '0:a:0?',
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+      '-f', 'mp4',
+      'pipe:1'
+    ]);
+
+    fileStream.pipe(ffmpeg.stdin);
+    ffmpeg.stdout.pipe(res);
+
+    fileStream.on('error', () => {
+      try { ffmpeg.kill('SIGKILL'); } catch (e) {}
+    });
+
+    ffmpeg.on('error', (err) => {
+      console.warn('[StreamEntity FFmpeg remux notice]:', err.message);
+      if (!res.headersSent) {
+        try { res.status(500).end(); } catch (e) {}
+      }
+    });
+
+    const cleanup = () => {
+      try { fileStream.destroy(); } catch (e) {}
+      try { ffmpeg.stdin.destroy(); } catch (e) {}
+      try { ffmpeg.kill('SIGKILL'); } catch (e) {}
+    };
+
+    res.on('close', cleanup);
+    req.on('close', cleanup);
+    return;
+  }
+
   const mimeType = mime.lookup(file.name) || 'video/mp4';
   const totalSize = file.length;
 
@@ -406,6 +473,7 @@ wss.on('connection', (ws) => {
       const data = JSON.parse(msgStr);
       if (data.type === 'subscribe' && data.infoHash) {
         activeSubscriptions.set(ws, data.infoHash);
+        lastActiveInfoHash = data.infoHash;
       } else if (data.type === 'unsubscribe') {
         activeSubscriptions.delete(ws);
       }
@@ -434,7 +502,7 @@ function sendSwarmSnapshot(ws) {
     totalSeeds += t.numSeeds || 0;
   });
 
-  const subHash = activeSubscriptions.get(ws) || (torrents[0]?.infoHash);
+  const subHash = activeSubscriptions.get(ws) || lastActiveInfoHash || (torrents[torrents.length - 1]?.infoHash) || (torrents[0]?.infoHash);
   const activeTelemetry = subHash ? engine.getSwarmTelemetry(subHash) : null;
 
   const payload = {
@@ -489,7 +557,7 @@ setInterval(() => {
 
   for (const client of wss.clients) {
     if (client.readyState === client.OPEN) {
-      const subHash = activeSubscriptions.get(client) || (torrents[0]?.infoHash);
+      const subHash = activeSubscriptions.get(client) || lastActiveInfoHash || (torrents[torrents.length - 1]?.infoHash) || (torrents[0]?.infoHash);
       let telemetry = subHash ? hashCache.get(subHash) : null;
       if (subHash && !telemetry) {
         telemetry = engine.getSwarmTelemetry(subHash);

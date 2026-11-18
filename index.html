@@ -88,16 +88,25 @@
   body{
     font-family:var(--font);color:var(--text);
     background-color:var(--bg);
-    /* Site background, from the supplied reference: a small dot
-       grid (~20px spacing) over the base colour — light dots in
-       dark mode, light-grey dots in light mode. Panels and cards
-       keep their own surfaces on top, so text stays readable. */
-    background-image:radial-gradient(var(--dot) 1px, transparent 1.35px);
-    background-size:20px 20px;
     -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
     min-height:100%;
     zoom:.8; /* whole site rendered 20% zoomed out */
+    position:relative;
   }
+  /* Site background: constant fixed dot grid (~20px spacing).
+     Stationary behind all foreground content so when the user scrolls,
+     only the foreground elements move up/down. */
+  body::before{
+    content:"";
+    position:fixed;
+    top:0;left:0;right:0;bottom:0;
+    width:100vw;height:100vh;
+    background-image:radial-gradient(var(--dot) 1px, transparent 1.35px);
+    background-size:20px 20px;
+    pointer-events:none;
+    z-index:0;
+  }
+  .app-header,.main-layout{position:relative;z-index:1}
   button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;min-height:36px}
   .hidden{display:none !important}
 
@@ -157,9 +166,9 @@
   .qr-loading{position:absolute;color:#6b7280;font-size:13px;font-weight:600}
   .network-url-box{width:100%;display:flex;flex-direction:column;gap:6px}
   .network-url-label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2)}
-  .network-url-row{display:flex;gap:8px;align-items:center}
+  .network-url-row{display:flex;gap:8px;align-items:center;width:100%}
   .network-url-input{
-    flex:1;background:var(--panel);border:1px solid var(--stroke);border-radius:10px;
+    flex:1;min-width:0;background:var(--panel);border:1px solid var(--stroke);border-radius:10px;
     padding:8px 12px;font-family:var(--mono);font-size:12.5px;color:var(--text);
   }
   .copy-url-btn{
@@ -279,11 +288,45 @@
     text-align:center;padding:24px;background:radial-gradient(120% 130% at 50% 0%,#1b1b20 0%,#000 62%);
   }
   .empty-player-icon-orb{
-    width:84px;height:84px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-    background:rgba(255,255,255,.07);border:1px solid var(--stroke);margin-bottom:4px;
+    width:84px;height:84px;
+    border-radius:20px;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(145deg, rgba(255,255,255,.13) 0%, rgba(255,255,255,.04) 100%), #1a1a20;
+    border:1px solid rgba(255,255,255,.16);
+    box-shadow:0 12px 32px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.35), inset 0 1px 1px rgba(255,255,255,.24);
+    margin-bottom:6px;
+    transition:transform .22s ease, box-shadow .22s ease;
   }
   .empty-player-heading{font-size:21px;font-weight:700;letter-spacing:.01em;color:#ffffff}
   .empty-player-desc{font-size:13.5px;color:rgba(255,255,255,.72);max-width:340px;line-height:1.45}
+  .codec-fallback-overlay{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:20px;text-align:center;background:radial-gradient(110% 120% at 50% 10%, rgba(26,26,32,.95) 0%, rgba(12,12,15,.98) 100%);
+    backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);z-index:25;transition:opacity .25s ease;
+  }
+  .codec-fallback-overlay.hidden{display:none !important}
+  .codec-fallback-badge{
+    display:inline-flex;align-items:center;gap:7px;padding:5px 14px;border-radius:999px;
+    background:rgba(255,159,10,.14);border:1px solid rgba(255,159,10,.35);color:#ff9f0a;
+    font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:12px;
+  }
+  .codec-fallback-badge .badge-dot{width:7px;height:7px;border-radius:50%;background:#ff9f0a;box-shadow:0 0 6px #ff9f0a}
+  .codec-fallback-title{font-size:19px;font-weight:700;color:#ffffff;margin-bottom:8px;letter-spacing:-.01em}
+  .codec-fallback-desc{font-size:13px;line-height:1.5;color:rgba(255,255,255,.72);max-width:440px;margin-bottom:20px}
+  .codec-fallback-desc strong{color:#ffffff}
+  .codec-fallback-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px}
+  .codec-btn-primary{
+    display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:999px;
+    background:#ffffff;color:#000000;font-size:13px;font-weight:700;border:none;cursor:pointer;
+    box-shadow:0 4px 16px rgba(255,255,255,.2);transition:transform .18s ease;
+  }
+  .codec-btn-primary:active{transform:scale(.96)}
+  .codec-btn-secondary{
+    display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:999px;
+    background:rgba(255,255,255,.1);color:#ffffff;border:1px solid rgba(255,255,255,.18);
+    font-size:12.5px;font-weight:600;cursor:pointer;transition:background .18s ease, transform .18s ease;
+  }
+  .codec-btn-secondary:active{transform:scale(.96)}
   .player-hud{
     position:absolute;inset:0;display:none;flex-direction:column;justify-content:space-between;
     padding:14px 16px 12px;opacity:0;pointer-events:none;transition:opacity .35s ease;
@@ -415,6 +458,13 @@
   .i-thick-white{width:22px;height:5px;border-radius:3px;background:#1c1e21}
   .i-red{width:22px;height:4px;border-radius:2px;background:#e5484d}
   .i-core{width:9px;height:9px;border-radius:50%;background:#1c1e21;box-shadow:0 0 0 3px rgba(17,18,20,.13)}
+  /* High-fidelity radar legend colors */
+  #radarLegend .i-core{background:#1c1e21;box-shadow:0 0 0 2px rgba(28,30,33,.2)}
+  #radarLegend .i-dot{background:#30d158;box-shadow:0 0 6px rgba(48,209,88,.65)}
+  #radarLegend .i-ring{border-color:#0a84ff;background:rgba(10,132,255,.18);box-shadow:0 0 6px rgba(10,132,255,.5)}
+  #radarLegend .i-sq{background:#ff9f0a;box-shadow:0 0 6px rgba(255,159,10,.6)}
+  #radarLegend .i-tiny{border-color:#bf5af2;background:rgba(191,90,242,.2);box-shadow:0 0 6px rgba(191,90,242,.5)}
+  #radarLegend .i-x{color:#ff453a;font-weight:800}
   .swarm-card .note{color:#8a8f98}
 
   /* ================= Overview / FUSE ================= */
@@ -629,46 +679,54 @@
     .apple-search-input{flex:1 1 100%;padding:8px 12px 2px}
     .btn-stream-white{width:100%;justify-content:center;margin:2px}
     .server-status-card{
-      flex-direction:column;
-      align-items:stretch;
-      gap:9px;
-      padding:10px 14px;
-      border-radius:14px;
+      flex-direction:row;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:6px 12px;
+      border-radius:12px;
     }
     .server-status-header{
-      align-items:flex-start;
-      gap:10px;
-      width:100%;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+      flex:1;
     }
     .server-status-card .server-dot{
-      margin-top:4px;
+      margin-top:0;
+    }
+    .server-status-text{
+      display:flex;
+      flex-direction:column;
+      gap:0;
+      min-width:0;
+      overflow:hidden;
     }
     .server-status-title{
-      font-size:12px;
-      font-weight:700;
-      white-space:normal;
-      line-height:1.3;
+      font-size:11.5px;
+      font-weight:600;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      line-height:1.2;
     }
     .server-status-desc{
-      font-size:11px;
-      color:var(--text-2);
-      line-height:1.35;
-      white-space:normal;
-      word-break:break-word;
-      margin-top:2px;
+      display:none;
     }
     .server-action-cluster{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:8px;
-      width:100%;
+      display:flex;
+      align-items:center;
+      gap:5px;
+      width:auto;
+      flex:none;
     }
     .server-test-btn{
-      width:100%;
-      text-align:center;
-      font-size:11.5px;
-      padding:6px 8px;
-      min-height:30px;
+      width:auto;
+      font-size:11px;
+      padding:4px 9px;
+      min-height:26px;
+      height:26px;
+      border-radius:999px;
     }
     .apple-playback-triplet{gap:18px}
     .player-main-title{font-size:16px}
@@ -744,6 +802,12 @@
   html[data-theme="dark"] .swarm-card .i-tiny{border-color:#6e6e73;background:transparent}
   html[data-theme="dark"] .swarm-card .i-thick-white{background:#f5f5f7}
   html[data-theme="dark"] .swarm-card .i-core{background:#f5f5f7;box-shadow:0 0 0 3px rgba(245,245,247,.15)}
+  html[data-theme="dark"] #radarLegend .i-core{background:#f5f5f7;box-shadow:0 0 0 2px rgba(245,245,247,.25)}
+  html[data-theme="dark"] #radarLegend .i-dot{background:#30d158;box-shadow:0 0 6px rgba(48,209,88,.65)}
+  html[data-theme="dark"] #radarLegend .i-ring{border-color:#0a84ff;background:rgba(10,132,255,.2);box-shadow:0 0 6px rgba(10,132,255,.5)}
+  html[data-theme="dark"] #radarLegend .i-sq{background:#ff9f0a;box-shadow:0 0 6px rgba(255,159,10,.6)}
+  html[data-theme="dark"] #radarLegend .i-tiny{border-color:#bf5af2;box-shadow:0 0 6px rgba(191,90,242,.5)}
+  html[data-theme="dark"] #radarLegend .i-x{color:#ff453a}
 
   /* Thick wires: smooth multi-colour cycle in dark mode (streaming only) */
   html[data-theme="dark"] .swarm-card:not(.is-idle) #flowFilm,
@@ -921,6 +985,30 @@
             <p class="empty-player-desc">Paste any magnet link above to stream sequential 4K/1080p</p>
           </div>
 
+          <!-- Codec / Container Incompatible Overlay (for MKV, HEVC 10-bit on Safari, etc.) -->
+          <div id="codecFallbackOverlay" class="codec-fallback-overlay hidden">
+            <div class="codec-fallback-badge">
+              <span class="badge-dot"></span>
+              <span id="codecFallbackBadgeText">MKV / 4K HEVC Container</span>
+            </div>
+            <h3 class="codec-fallback-title">Swarm Active & Ready</h3>
+            <p class="codec-fallback-desc" id="codecFallbackDesc">
+              Web browsers (Safari/Chrome) cannot decode <strong>.mkv</strong> containers natively. Your local StreamEntity engine is actively connected to swarm peers and serving over LAN. Tap below to stream smoothly in <strong>VLC</strong> or <strong>Infuse</strong>:
+            </p>
+            <div class="codec-fallback-actions">
+              <button type="button" id="btnOverlayVlc" class="codec-btn-primary">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M12 2c-.4 0-.8.3-.9.7l-1.3 3.6h4.4L12.9 2.7c-.1-.4-.5-.7-.9-.7z" fill="#ff7900"/><path d="M9.5 6.8l-1.3 3.6h7.6l-1.3-3.6H9.5z" fill="#ffffff"/><path d="M7.9 10.9l-1.3 3.6h10.8l-1.3-3.6H7.9z" fill="#ff7900"/><path d="M6.3 15h11.4l1.1 3H5.2l1.1-3z" fill="#ffffff"/><rect x="3.5" y="18.5" width="17" height="2.5" rx="1.2" fill="#e06300"/></svg>
+                Open in VLC Player
+              </button>
+              <button type="button" id="btnOverlayInfuse" class="codec-btn-secondary">
+                Open in Infuse / Outplayer
+              </button>
+              <button type="button" id="btnOverlayCopy" class="codec-btn-secondary">
+                📋 Copy Stream URL
+              </button>
+            </div>
+          </div>
+
           <div id="playerHud" class="player-hud">
             <div class="player-top-row">
               <div class="player-top-left">
@@ -1072,11 +1160,11 @@
       <!-- Live Swarm (latest swarm code) -->
       <section class="swarm-card card is-idle" id="swarmCard">
         <header class="card-head">
-          <h1>Live Swarm</h1>
+          <h1>Live Telemetry</h1>
           <div class="head-right">
             <p class="stats"><b id="mbps">—</b> Mbps &nbsp;·&nbsp; <span id="swarmPeers">—</span> peers &nbsp;·&nbsp; <span id="swarmSeeders">—</span> seeders</p>
             <div class="seg" role="tablist" aria-label="Swarm view">
-              <button type="button" class="active" id="tabNetwork" aria-pressed="true">Network</button>
+              <button type="button" class="active" id="tabNetwork" aria-pressed="true">Swarm</button>
               <button type="button" id="tabRadar" aria-pressed="false">Radar</button>
               <button type="button" id="tabTimeline" aria-pressed="false">Timeline</button>
             </div>
@@ -1293,6 +1381,7 @@
           </svg>
           Detailed Swarm Node Diagnostics &amp; Peer Wires
         </span>
+        <span id="peersCountrySummary" class="peers-country-summary" style="margin-left:auto;margin-right:12px;font-size:12px;color:var(--text-2);display:inline-flex;align-items:center;gap:6px;"></span>
         <svg id="drawerChevron" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="transition: transform 0.25s ease;" aria-hidden="true">
           <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
         </svg>
@@ -1302,17 +1391,18 @@
           <thead>
             <tr>
               <th>Remote Peer Address</th>
+              <th>Country</th>
               <th>Client Software</th>
               <th>Type</th>
               <th>Download Speed</th>
               <th>Upload Speed</th>
               <th>Downloaded</th>
-              <th>Status</th>
+              <th>Status / Role</th>
             </tr>
           </thead>
           <tbody id="peersTableBody">
             <tr>
-              <td colspan="7" class="peers-empty">
+              <td colspan="8" class="peers-empty">
                 No active stream. Paste a magnet link above to connect to swarm peers.
               </td>
             </tr>
@@ -1539,11 +1629,11 @@
 
         <span style="font-size:12px;color:var(--text-2);text-align:center;line-height:1.45;">Scan with any phone camera to pay — works even without a Revolut account!</span>
 
-        <div class="network-url-box">
-          <div class="network-url-row">
-            <input type="text" id="revolutHandleInput" readonly class="network-url-input" value="@vr91" />
-            <button type="button" id="btnCopyRevolutHandle" class="copy-url-btn">Copy @vr91</button>
-            <a id="btnOpenRevolutWeb" href="https://revolut.me/vr91" target="_blank" rel="noopener noreferrer" class="copy-url-btn" style="background:var(--panel-strong);border:1px solid var(--stroke);color:var(--text);text-decoration:none;">Open Link ↗</a>
+        <div class="network-url-box" style="padding:8px 10px;box-sizing:border-box;width:100%;overflow:hidden;">
+          <div class="network-url-row" style="display:flex;align-items:center;width:100%;gap:6px;box-sizing:border-box;">
+            <input type="text" id="revolutHandleInput" readonly class="network-url-input" value="@vr91" style="width:48px;min-width:48px;max-width:50px;flex:none;text-align:center;padding:7px 2px;font-size:11px;box-sizing:border-box;" />
+            <button type="button" id="btnCopyRevolutHandle" class="copy-url-btn" style="flex:1 1 auto;min-width:0;padding:7px 4px;font-size:11px;text-align:center;white-space:nowrap;box-sizing:border-box;">Copy @vr91</button>
+            <a id="btnOpenRevolutWeb" href="https://revolut.me/vr91" target="_blank" rel="noopener noreferrer" class="copy-url-btn" style="flex:1.2 1 auto;min-width:0;padding:7px 6px;font-size:11px;text-align:center;white-space:nowrap;background:var(--panel-strong);border:1px solid var(--stroke);color:var(--text);text-decoration:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;">Open Link ↗</a>
           </div>
         </div>
       </div>
@@ -1956,7 +2046,7 @@
     startSwarmLoop();
   }
 
-  function setSwarmIdle() {
+  function setSwarmIdle(preserveTitles) {
     swarmActive = false;
     builtSwarmKey = "";
     stopSwarmLoop();
@@ -1976,18 +2066,20 @@
     setText("mbps", "—");
     setText("swarmPeers", "—");
     setText("swarmSeeders", "—");
-    setText("torrent1Title", "No Active Stream");
-    setText("torrent1Sub", "idle · 0 peers");
-    setText("torrent1Meta", "— Mbps · — peers");
-    setText("torrent2Title", "—");
-    setText("torrent2Sub", "— Mbps · — peers");
-    setText("torrent3Title", "—");
-    setText("torrent3Sub", "idle · — peers");
-    setText("cacheLabel", "— MB · hit —%");
-    setText("cacheSub", "— active · — stale");
-    resetFuseReadout();
-    setNowPlaying(null, null);
-    setText("client1Sub", "waiting for stream");
+    if (!preserveTitles) {
+      setText("torrent1Title", "No Active Stream");
+      setText("torrent1Sub", "idle · 0 peers");
+      setText("torrent1Meta", "— Mbps · — peers");
+      setText("torrent2Title", "—");
+      setText("torrent2Sub", "— Mbps · — peers");
+      setText("torrent3Title", "—");
+      setText("torrent3Sub", "idle · — peers");
+      setText("cacheLabel", "— MB · hit —%");
+      setText("cacheSub", "— active · — stale");
+      resetFuseReadout();
+      setNowPlaying(null, null);
+      setText("client1Sub", "waiting for stream");
+    }
     setText("client2Label", "—");
     setText("client2Sub", "idle · —");
     if (typeof liveState !== "undefined") { liveState.peersList = []; liveState.totalMbps = 0; }
@@ -2071,39 +2163,78 @@
     return worldPath2D;
   }
 
+  var worldCoastPath2D = null;
+  function getWorldCoastPath() {
+    if (worldCoastPath2D) return worldCoastPath2D;
+    if (typeof WORLD_COAST_PATH === "string" && typeof Path2D === "function") {
+      try { worldCoastPath2D = new Path2D(WORLD_COAST_PATH); } catch (e) { worldCoastPath2D = null; }
+    }
+    return worldCoastPath2D;
+  }
+
   var COUNTRY_CENTROIDS = {
+    // North America & Caribbean
     US: [39, -98], USA: [39, -98], "UNITED STATES": [39, -98],
     CA: [56, -106], CANADA: [56, -106], MX: [23, -102], MEXICO: [23, -102],
+    GT: [15, -90], GUATEMALA: [15, -90], CU: [21, -80], CUBA: [21, -80],
+    PA: [9, -80], PANAMA: [9, -80], CR: [10, -84], "COSTA RICA": [10, -84],
+    DO: [19, -70], "DOMINICAN REPUBLIC": [19, -70], PR: [18, -66], "PUERTO RICO": [18, -66],
+    HN: [15, -86], HONDURAS: [15, -86], SV: [13, -88], "EL SALVADOR": [13, -88],
+    NI: [13, -85], NICARAGUA: [13, -85], JM: [18, -77], JAMAICA: [18, -77],
+    // South America
     BR: [-14, -52], BRAZIL: [-14, -52], AR: [-35, -64], ARGENTINA: [-35, -64],
+    PY: [-23, -58], PARAGUAY: [-23, -58], UY: [-33, -56], URUGUAY: [-33, -56],
+    CL: [-35, -71], CHILE: [-35, -71], CO: [4, -73], COLOMBIA: [4, -73],
+    PE: [-9, -75], PERU: [-9, -75], VE: [6, -66], VENEZUELA: [6, -66],
+    EC: [-1, -78], ECUADOR: [-1, -78], BO: [-16, -64], BOLIVIA: [-16, -64],
+    // Europe
     GB: [54, -2], UK: [54, -2], "UNITED KINGDOM": [54, -2],
     IE: [53, -8], IRELAND: [53, -8], FR: [47, 2], FRANCE: [47, 2],
     DE: [51, 10], GERMANY: [51, 10], NL: [52, 5], NETHERLANDS: [52, 5],
-    BE: [50, 4], ES: [40, -4], SPAIN: [40, -4], PT: [39, -8], PORTUGAL: [39, -8],
-    IT: [42, 13], ITALY: [42, 13], CH: [47, 8], SWITZERLAND: [47, 8],
-    AT: [47, 14], AUSTRIA: [47, 14], PL: [52, 19], POLAND: [52, 19],
-    CZ: [50, 15], RO: [46, 25], UA: [49, 32], RU: [60, 90], RUSSIA: [60, 90],
-    SE: [62, 15], SWEDEN: [62, 15], NO: [61, 9], NORWAY: [61, 9],
-    FI: [62, 25], FINLAND: [62, 25], DK: [56, 10], DENMARK: [56, 10],
-    IS: [65, -19], ICELAND: [65, -19], TR: [39, 35], TURKEY: [39, 35],
+    BE: [50, 4], BELGIUM: [50, 4], ES: [40, -4], SPAIN: [40, -4],
+    PT: [39, -8], PORTUGAL: [39, -8], IT: [42, 13], ITALY: [42, 13],
+    CH: [47, 8], SWITZERLAND: [47, 8], AT: [47, 14], AUSTRIA: [47, 14],
+    PL: [52, 19], POLAND: [52, 19], CZ: [50, 15], CZECHIA: [50, 15], "CZECH REPUBLIC": [50, 15],
+    SK: [48, 19], SLOVAKIA: [48, 19], HU: [47, 19], HUNGARY: [47, 19],
+    RO: [46, 25], ROMANIA: [46, 25], BG: [42, 25], BULGARIA: [42, 25],
+    GR: [39, 22], GREECE: [39, 22], UA: [49, 32], UKRAINE: [49, 32],
+    BY: [53, 28], BELARUS: [53, 28], MD: [47, 28], MOLDOVA: [47, 28],
+    RU: [60, 90], RUSSIA: [60, 90], SE: [62, 15], SWEDEN: [62, 15],
+    NO: [61, 9], NORWAY: [61, 9], FI: [62, 25], FINLAND: [62, 25],
+    DK: [56, 10], DENMARK: [56, 10], IS: [65, -19], ICELAND: [65, -19],
+    EE: [58, 25], ESTONIA: [58, 25], LV: [57, 24], LATVIA: [57, 24],
+    LT: [55, 24], LITHUANIA: [55, 24], RS: [44, 21], SERBIA: [44, 21],
+    HR: [45, 15], CROATIA: [45, 15], BA: [44, 18], BOSNIA: [44, 18],
+    SI: [46, 15], SLOVENIA: [46, 15], AL: [41, 20], ALBANIA: [41, 20],
+    // Middle East & Africa
+    TR: [39, 35], TURKEY: [39, 35], IL: [31, 35], ISRAEL: [31, 35],
+    SA: [24, 45], "SAUDI ARABIA": [24, 45], AE: [24, 54], UAE: [24, 54],
+    IR: [32, 53], IRAN: [32, 53], IQ: [33, 44], IRAQ: [33, 44],
+    EG: [27, 30], EGYPT: [27, 30], ZA: [-29, 25], "SOUTH AFRICA": [-29, 25],
+    NG: [9, 8], NIGERIA: [9, 8], KE: [0, 38], KENYA: [0, 38],
+    MA: [32, -6], MOROCCO: [32, -6], DZ: [28, 3], ALGERIA: [28, 3],
+    TN: [34, 9], TUNISIA: [34, 9], GH: [8, -1], GHANA: [8, -1],
+    // Asia & Oceania
     IN: [21, 78], INDIA: [21, 78], PK: [30, 70], PAKISTAN: [30, 70],
+    BD: [24, 90], BANGLADESH: [24, 90], LK: [7, 81], "SRI LANKA": [7, 81],
     CN: [35, 105], CHINA: [35, 105], JP: [36, 138], JAPAN: [36, 138],
-    KR: [37, 128], "SOUTH KOREA": [37, 128], SG: [1, 104], SINGAPORE: [1, 104],
+    KR: [37, 128], "SOUTH KOREA": [37, 128], TW: [23, 121], TAIWAN: [23, 121],
+    HK: [22, 114], "HONG KONG": [22, 114], SG: [1, 104], SINGAPORE: [1, 104],
     ID: [-2, 118], INDONESIA: [-2, 118], MY: [4, 102], MALAYSIA: [4, 102],
     TH: [15, 101], THAILAND: [15, 101], VN: [15, 107], VIETNAM: [15, 107],
-    AU: [-25, 134], AUSTRALIA: [-25, 134], NZ: [-42, 173], "NEW ZEALAND": [-42, 173],
-    AE: [24, 54], UAE: [24, 54], IL: [31, 35], ISRAEL: [31, 35],
-    EG: [27, 30], EGYPT: [27, 30], ZA: [-29, 25], "SOUTH AFRICA": [-29, 25],
-    NG: [9, 8], NIGERIA: [9, 8], KE: [0, 38], KENYA: [0, 38]
+    PH: [13, 122], PHILIPPINES: [13, 122], KZ: [48, 67], KAZAKHSTAN: [48, 67],
+    AU: [-25, 134], AUSTRALIA: [-25, 134], NZ: [-42, 173], "NEW ZEALAND": [-42, 173]
   };
 
   function peerLatLon(p) {
+    if (!p) return null;
     var lat = p.lat != null ? p.lat : (p.latitude != null ? p.latitude : null);
     var lon = p.lon != null ? p.lon : (p.lng != null ? p.lng : (p.longitude != null ? p.longitude : null));
     if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) return [Number(lat), Number(lon)];
-    if (p.country) {
-      var c = COUNTRY_CENTROIDS[String(p.country).trim().toUpperCase()];
-      if (c) return c;
-    }
+    var cCode = String(p.country || "").trim().toUpperCase();
+    if (cCode && COUNTRY_CENTROIDS[cCode]) return COUNTRY_CENTROIDS[cCode];
+    var cName = String(p.countryName || "").trim().toUpperCase();
+    if (cName && COUNTRY_CENTROIDS[cName]) return COUNTRY_CENTROIDS[cName];
     return null;
   }
 
@@ -2126,177 +2257,182 @@
   function drawRadar(now) {
     var canvas = $("radarCanvas");
     if (!canvas || canvas.classList.contains("hidden")) return;
-    var s = sizeCanvas(canvas), ctx = s.ctx, w = s.w, h = s.h;
-    var cx = w / 2, cy = h / 2;
+    var sObj = sizeCanvas(canvas), ctx = sObj.ctx, w = sObj.w, h = sObj.h;
     var dark = isDark();
-    var t = reduced ? 0 : (now || 0) / 1000;
-    ctx.clearRect(0, 0, w, h);
-    // Ocean: PURE black in dark mode, PURE white in light mode.
-    // The map uses only these two colours, nothing else.
-    ctx.fillStyle = dark ? "#000000" : "#ffffff"; ctx.fillRect(0, 0, w, h);
-    var landCol = dark ? "#ffffff" : "#000000";
-    var oceanCol = dark ? "#000000" : "#ffffff";
 
-    // TRUE-ASPECT CONTAIN FIT — one uniform scale for both axes,
-    // centred, exactly the fit in the supplied WorldMap.qml
-    // (mapWidth = min(w, h*2), mapHeight = mapWidth/2). The map
-    // keeps the data's own 2:1 proportions; whatever panel area
-    // it does not cover stays empty ocean, mostly at the sides.
-    // Peers below plot through this same undistorted projection.
-    var mw = Math.min(w, h * 2), mh = mw / 2;
-    var ox = (w - mw) / 2, oy = (h - mh) / 2;
-    function proj(lat, lon) {
-      return [ox + (lon + 180) / 360 * mw, oy + (90 - lat) / 180 * mh];
+    // True 2:1 aspect, contain-fit, never stretched:
+    // map is mw = min(w, h * 2), mh = mw / 2, centred in the panel.
+    const mw = Math.min(w, h * 2), mh = mw / 2;
+    const ox = (w - mw) / 2, oy = (h - mh) / 2;
+    const s = mw / 1000;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Ocean — dark mode: same #131316 as the Network panel,
+    // NOT pitch black. Light mode: #ffffff.
+    ctx.fillStyle = dark ? "#131316" : "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.scale(s, s);
+
+    // Land fill — full country path, white in dark / black in light
+    var mapPath = getWorldPath();
+    if (mapPath) {
+      ctx.fillStyle = dark ? "#ffffff" : "#000000";
+      ctx.fill(mapPath);
     }
 
-    // No graticule / grid lines behind the map — the panel shows
-    // only the ocean, the land, the country borders, the peer
-    // dots and the sweep.
+    // Borders — coastline ONLY. The full path is never stroked,
+    // so no internal country borders appear.
+    var coastPath = getWorldCoastPath();
+    if (coastPath) {
+      ctx.strokeStyle = dark ? "#000000" : "#ffffff";
+      ctx.lineWidth = 1 / s;
+      ctx.stroke(coastPath);
+    }
 
-    // Detailed country map (assets/worldmap.js, from the supplied
-    // Natural Earth data): land filled solid in the pure land
-    // colour, every country border stroked thin in the pure
-    // ocean colour. Dark mode = white land on black; light mode
-    // = black land on white — exactly the two supplied references.
-    var wp = getWorldPath();
-    if (wp) {
+    // Sweep — centre pivot, covers the whole rectangular map
+    const sweepAngle = ((now || 0) / 4000) * Math.PI * 2;
+    function drawSweep(sa) {
+      if (reduced) return;
+      const scx = 500, scy = 250, reach = 600;
+      ctx.beginPath();
+      ctx.moveTo(scx, scy);
+      ctx.arc(scx, scy, reach, sa - 0.45, sa);
+      ctx.closePath();
+      ctx.fillStyle = getSweepPattern(ctx, dark ? "#ffffff" : "#000000");
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(scx, scy);
+      ctx.lineTo(scx + Math.cos(sa) * reach, scy + Math.sin(sa) * reach);
+      ctx.strokeStyle = dark ? "#ffffff" : "#000000";
+      ctx.lineWidth = 1.4 / s;
+      ctx.stroke();
+    }
+    drawSweep(sweepAngle);
+
+    // Projections and angle calculations in 1000x500 map space
+    function proj(lon, lat) {
+      return [(lon + 180) / 360 * 1000, (90 - lat) / 180 * 500];
+    }
+    function angleDiff(a, b) {
+      var d = (a - b) % (Math.PI * 2);
+      if (d < -Math.PI) d += Math.PI * 2;
+      if (d > Math.PI) d -= Math.PI * 2;
+      return d;
+    }
+    function bearing(p) {
+      return Math.atan2(p.y - 250, p.x - 500);
+    }
+
+    // High-fidelity colored peer markers:
+    // Seeder: vibrant emerald green (#30d158) with glowing halo
+    // Leecher: vibrant electric blue (#0a84ff) ring with glow
+    // uTP: vibrant amber/orange (#ff9f0a) square with glow
+    // Half-open: electric violet (#bf5af2) ring
+    // Banned: coral red (#ff453a) cross ✕
+    function drawPeerMarker(x, y, type, alpha) {
       ctx.save();
-      ctx.translate(ox, oy);
-      ctx.scale(mw / 1000, mw / 1000);
-      ctx.fillStyle = landCol;
-      ctx.fill(wp);
-      ctx.strokeStyle = oceanCol;
-      ctx.lineWidth = 0.7 / Math.max(0.5, mw / 1000);
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.stroke(wp);
+      ctx.globalAlpha = Math.max(0.28, Math.min(1.0, alpha));
+      var isSwept = alpha > 0.65;
+      var rimCol = dark ? "#000000" : "#ffffff";
+
+      if (type === "seeder") {
+        if (isSwept) {
+          ctx.beginPath();
+          ctx.arc(x, y, 7.5, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(48, 209, 88, 0.40)";
+          ctx.fill();
+        }
+        ctx.beginPath(); ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+        ctx.fillStyle = "#30d158"; ctx.fill();
+        ctx.lineWidth = 1 / s; ctx.strokeStyle = rimCol; ctx.stroke();
+      } else if (type === "leecher") {
+        if (isSwept) {
+          ctx.beginPath();
+          ctx.arc(x, y, 7.5, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(10, 132, 255, 0.35)";
+          ctx.fill();
+        }
+        ctx.beginPath(); ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+        ctx.fillStyle = dark ? "rgba(10, 132, 255, 0.22)" : "rgba(10, 132, 255, 0.15)";
+        ctx.fill();
+        ctx.lineWidth = 1.6 / s; ctx.strokeStyle = "#0a84ff"; ctx.stroke();
+      } else if (type === "utp") {
+        if (isSwept) {
+          ctx.fillStyle = "rgba(255, 159, 10, 0.38)";
+          ctx.fillRect(x - 5.5, y - 5.5, 11, 11);
+        }
+        ctx.fillStyle = "#ff9f0a";
+        ctx.fillRect(x - 3.5, y - 3.5, 7, 7);
+        ctx.lineWidth = 1 / s; ctx.strokeStyle = rimCol;
+        ctx.strokeRect(x - 3.5, y - 3.5, 7, 7);
+      } else if (type === "half-open" || type === "half") {
+        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.lineWidth = 1.4 / s; ctx.strokeStyle = "#bf5af2"; ctx.stroke();
+      } else if (type === "banned") {
+        ctx.strokeStyle = "#ff453a";
+        ctx.lineWidth = 2.0 / s;
+        ctx.beginPath();
+        ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4);
+        ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
-    // Sweep: hand pivots at the map centre, length = half the map
-    // diagonal, so the sweep covers the entire map, corners
-    // included. The canvas edge clips the hand wherever it runs
-    // past the map — expected over the map's smallest areas.
-    // Pure black/white like the rest of the map: the wedge is a
-    // dot pattern in the pure land colour (no green, no
-    // translucent tint) and the hand is a solid pure-colour line.
-    // The sweep angle also drives the peer blink (see below).
-    var sa = (t * 0.55) % (Math.PI * 2) - Math.PI / 2;
-    if (!reduced) {
-      var reach = Math.sqrt(mw * mw + mh * mh) / 2;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, reach, sa - 0.6, sa);
-      ctx.closePath();
-      ctx.fillStyle = getSweepPattern(ctx, landCol);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(sa) * reach, cy + Math.sin(sa) * reach);
-      ctx.strokeStyle = landCol; ctx.lineWidth = 1.4; ctx.stroke();
-    }
-
-    // Real peers only: plotted at their real location when telemetry
-    // carries lat/lon or country; hash placement otherwise.
     var list = liveState.peersList || [];
-    var plotted = [];
-    list.slice(0, 80).forEach(function (p, idx) {
-      var px, py;
+    var radarPeers = [];
+    list.slice(0, 100).forEach(function (p, idx) {
       var key = String(p.ip || "") + ":" + String(p.port || idx);
       var hash = 0;
       for (var c = 0; c < key.length; c++) hash = (hash * 31 + key.charCodeAt(c)) >>> 0;
       var ll = peerLatLon(p);
+      var lon, lat;
       if (ll) {
-        var xy = proj(ll[0], ll[1]);
-        px = xy[0]; py = xy[1];
+        // Natural geographic scatter inside the geocoded country
+        var jLon = (((hash % 100) / 100) - 0.5) * 5;
+        var jLat = ((((hash >> 8) % 100) / 100) - 0.5) * 4;
+        lat = Math.max(-70, Math.min(75, ll[0] + jLat));
+        lon = Math.max(-175, Math.min(175, ll[1] + jLon));
       } else {
-        px = ox + ((hash % 1000) / 1000) * mw;
-        py = oy + (((hash >> 10) % 1000) / 1000) * mh;
+        lon = ((hash % 1000) / 1000) * 360 - 180;
+        lat = 90 - (((hash >> 10) % 1000) / 1000) * 180;
       }
-      // Same classification the swarm itself applies to its peer nodes.
-      plotted.push({ x: px, y: py, p: p, idx: idx, hash: hash, type: classifyPeer(p) });
+      var ptype = classifyPeer(p);
+      if (ptype === "half") ptype = "half-open";
+      radarPeers.push({ lon: lon, lat: lat, type: ptype, country: p.country, flag: p.flag });
     });
 
-    // NO wires and NO travelling packets on the map — that flow
-    // language belongs to the Network swarm only. On the map each
-    // peer is a STATIC marker at its location; its only motion is
-    // the radar blink below.
-    //
-    // Peer dots: the swarm's own nodes — same shapes and type logic
-    // buildSwarm uses (seeder solid, leecher hollow ring, uTP
-    // square, half-open tiny grey ring, banned red X), drawn a
-    // little larger than in the swarm. VISIBILITY: on this map the
-    // swarm colours collide with the land — white dots vanish on
-    // the white land in dark mode, black dots vanish on the
-    // black land in light mode — so every marker sits on a
-    // solid disc in the OPPOSITE colour (dark disc under a white
-    // dot, white disc under a dark dot), keeping every peer
-    // unmistakable on land and on ocean, in both themes.
-    //
-    // RADAR BLINK: a marker sits dim/faint until the rotating
-    // sweep hand passes over its bearing from the centre — then
-    // it flashes bright with a brief halo bloom and fades back to
-    // dim until the sweep comes round again, exactly like a real
-    // radar return. Nothing on the map moves or flows.
-    var nodeFill = landCol;
-    var contrast = oceanCol;
-    var halfStroke = landCol;
-    plotted.forEach(function (d) {
-      var R = d.type === "half" ? 3.4 : 5; // dot radius on the map
-      var glow = 1;
-      if (!reduced) {
-        var delta = (sa - Math.atan2(d.y - cy, d.x - cx)) % (Math.PI * 2);
-        if (delta < 0) delta += Math.PI * 2;
-        glow = Math.exp(-delta * 1.15); // 1 as the sweep passes, decaying after
-      }
-      var alpha = reduced ? 1 : 0.30 + 0.70 * glow;
-      // Brief halo bloom while the return is bright.
-      if (!reduced && glow > 0.04) {
-        ctx.beginPath(); ctx.arc(d.x, d.y, R + 3 + (1 - glow) * 8, 0, Math.PI * 2);
-        ctx.strokeStyle = nodeFill; ctx.globalAlpha = glow * 0.45;
-        ctx.lineWidth = 1.4; ctx.stroke(); ctx.globalAlpha = 1;
-      }
-      // Contrasting halo disc in the opposite colour.
-      ctx.beginPath(); ctx.arc(d.x, d.y, R + 2.1, 0, Math.PI * 2);
-      ctx.fillStyle = contrast; ctx.globalAlpha = alpha * 0.92; ctx.fill();
-      ctx.globalAlpha = alpha;
-      if (d.type === "seeder") {
-        ctx.beginPath(); ctx.arc(d.x, d.y, R, 0, Math.PI * 2);
-        ctx.fillStyle = nodeFill; ctx.fill();
-      } else if (d.type === "leecher") {
-        ctx.beginPath(); ctx.arc(d.x, d.y, R, 0, Math.PI * 2);
-        ctx.fillStyle = contrast; ctx.fill();
-        ctx.strokeStyle = nodeFill; ctx.lineWidth = 1.6; ctx.stroke();
-      } else if (d.type === "utp") {
-        ctx.beginPath(); ctx.rect(d.x - 4.5, d.y - 4.5, 9, 9);
-        ctx.fillStyle = nodeFill; ctx.fill();
-      } else if (d.type === "half") {
-        ctx.beginPath(); ctx.arc(d.x, d.y, R, 0, Math.PI * 2);
-        ctx.fillStyle = contrast; ctx.fill();
-        ctx.strokeStyle = halfStroke; ctx.lineWidth = 1.6; ctx.stroke();
-      } else { // banned
-        ctx.beginPath();
-        ctx.moveTo(d.x - 5, d.y - 5); ctx.lineTo(d.x + 5, d.y + 5);
-        ctx.moveTo(d.x + 5, d.y - 5); ctx.lineTo(d.x - 5, d.y + 5);
-        ctx.strokeStyle = nodeFill; ctx.lineWidth = 2.1; ctx.lineCap = "round"; ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-    });
+    // Peer markers — same shapes as the swarm, static at real
+    // lat/lon, no wires, no travelling packets on the map.
+    // Blink only when the sweep passes over them:
+    // glow = exp(-delta * 1.15), alpha 0.30 dim -> 1.0 at pass.
+    for (const p of radarPeers) {
+      const [x, y] = proj(p.lon, p.lat); // x=(lon+180)/360*1000, y=(90-lat)/180*500
+      p.x = x; p.y = y;
+      const delta = Math.abs(angleDiff(sweepAngle, bearing(p)));
+      const glow = Math.exp(-delta * 1.15);
+      const alpha = 0.30 + 0.70 * glow;
+      drawPeerMarker(x, y, p.type, alpha); // solid/hollow dot, uTP square, half-open ring, red ✕
+    }
 
-    // Player core at the centre of the map: a static solid core
-    // with a contrasting ring (the sweep pivots here). No pulse
-    // rings — on the map the only motion is the sweep and the
-    // peer blink it triggers.
-    ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2);
-    ctx.fillStyle = nodeFill; ctx.fill();
-    // Contrasting ring so the core never blends into the land either.
-    ctx.beginPath(); ctx.arc(cx, cy, 10.5, 0, Math.PI * 2);
-    ctx.strokeStyle = contrast; ctx.lineWidth = 2; ctx.stroke();
+    // Player core at the centre of the map
+    ctx.beginPath(); ctx.arc(500, 250, 7, 0, Math.PI * 2);
+    ctx.fillStyle = dark ? "#f5f5f7" : "#1c1e21"; ctx.fill();
+    ctx.beginPath(); ctx.arc(500, 250, 8.5, 0, Math.PI * 2);
+    ctx.strokeStyle = dark ? "#131316" : "#ffffff"; ctx.lineWidth = 1.5 / s; ctx.stroke();
 
-    ctx.fillStyle = landCol;
+    ctx.restore();
+
+    // Peer counter text at panel footer
+    ctx.fillStyle = dark ? "#8a8f98" : "#6b7280";
     ctx.font = "500 11px -apple-system, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(list.length ? list.length + " live peers" : "waiting for live peers", cx, h - 8);
+    ctx.fillText(list.length ? list.length + " live peers" : "waiting for live peers", w / 2, h - 8);
   }
 
   var radarAnimId = null;
@@ -2653,6 +2789,12 @@
   function playTorrentInPlayer(infoHash) {
     if (!infoHash) return;
     currentHash = infoHash;
+    var t = latestTorrents ? latestTorrents.find(function (x) { return x.infoHash && x.infoHash.toLowerCase() === infoHash.toLowerCase(); }) : null;
+    if (t && (t.cleanTitle || t.name)) {
+      currentTitle = t.cleanTitle || cleanTitle(t.name);
+    }
+    setText("videoTitle", currentTitle);
+    setNowPlaying(currentTitle, t && t.name ? extractDetails(t.name) : "Connecting to stream…");
     currentStreamUrl = getApiUrl("/stream/" + currentHash);
     $("emptyPlayerState").style.display = "none";
     container.classList.add("has-media");
@@ -2681,6 +2823,7 @@
     var hashToRemove = specificHash || currentHash || (latestTorrents && latestTorrents[0] ? latestTorrents[0].infoHash : null);
     if (!specificHash || specificHash === currentHash) {
       clearTimeout(hudTimer);
+      hideCodecFallback();
       video.pause();
       video.removeAttribute("src");
       video.load();
@@ -2744,6 +2887,16 @@
   });
   video.addEventListener("loadedmetadata", function () {
     setText("playerTimeTotal", fmtTime(video.duration));
+  });
+  video.addEventListener("error", function () {
+    var err = video.error;
+    console.warn("Video playback error:", err);
+    if (!currentStreamUrl) return;
+    if (err && err.code === 4) {
+      showCodecFallback("Codec / Container Not Supported", "This browser cannot decode this video format (MKV / 4K x265). StreamEntity is actively serving the media file over LAN. Tap below to watch in <strong>VLC</strong> or <strong>Infuse</strong>:");
+    } else {
+      toast("Video buffering from swarm peers… please wait a few seconds.");
+    }
   });
 
   $("btnPlayPause").addEventListener("click", function () {
@@ -2934,18 +3087,66 @@
       document.body.removeChild(ta);
     }
   }
+  function getAbsoluteStreamUrl() {
+    if (!currentStreamUrl) return "";
+    if (currentStreamUrl.startsWith("http://") || currentStreamUrl.startsWith("https://")) {
+      return currentStreamUrl;
+    }
+    var base = getBackendBase();
+    if (base) return base.replace(/\/+$/, "") + (currentStreamUrl.startsWith("/") ? currentStreamUrl : "/" + currentStreamUrl);
+    return window.location.origin + (currentStreamUrl.startsWith("/") ? currentStreamUrl : "/" + currentStreamUrl);
+  }
+
+  function showCodecFallback(badgeText, descText) {
+    var overlay = $("codecFallbackOverlay");
+    if (!overlay) return;
+    overlay.classList.remove("hidden");
+    if (badgeText) setText("codecFallbackBadgeText", badgeText);
+    if (descText) $("codecFallbackDesc").innerHTML = descText;
+    if ($("btnOverlayVlc")) {
+      $("btnOverlayVlc").onclick = function () {
+        $("btnOpenVlc").click();
+      };
+    }
+    if ($("btnOverlayInfuse")) {
+      $("btnOverlayInfuse").onclick = function () {
+        var u = getAbsoluteStreamUrl();
+        if (!u) return;
+        var infuseUrl = "infuse://x-callback-url/play?url=" + encodeURIComponent(u);
+        window.location.href = infuseUrl;
+        setTimeout(function () {
+          window.location.href = "outplayer://" + encodeURIComponent(u);
+        }, 1200);
+      };
+    }
+    if ($("btnOverlayCopy")) {
+      $("btnOverlayCopy").onclick = function () {
+        $("btnCopyStream").click();
+      };
+    }
+  }
+
+  function hideCodecFallback() {
+    var overlay = $("codecFallbackOverlay");
+    if (overlay) overlay.classList.add("hidden");
+  }
+
   $("btnCopyStream").addEventListener("click", function () {
-    copyText(currentStreamUrl, "Stream URL copied — paste it into VLC, mpv or Infuse");
+    var absUrl = getAbsoluteStreamUrl();
+    copyText(absUrl, "Stream URL copied — paste it into VLC, Infuse, MPV, or Outplayer");
   });
   $("btnOpenVlc").addEventListener("click", function () {
-    if (!currentStreamUrl) { toast("Nothing to open yet — start a stream first"); return; }
+    var absUrl = getAbsoluteStreamUrl();
+    if (!absUrl) { toast("Nothing to open yet — start a stream first"); return; }
+    // Only open VLC on the current client device (e.g. iPad / mobile / local browser via protocol handler)
+    // Never trigger server-side VLC launch on the host PC.
     var a = document.createElement("a");
-    a.href = "vlc://" + currentStreamUrl;
+    a.href = "vlc://" + absUrl;
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    toast("Opening in VLC… if nothing happens, copy the stream URL instead");
+    toast("Opening in VLC… (or paste copied URL into VLC/Infuse)");
   });
 
   /* ================================================================
@@ -3099,13 +3300,30 @@
     if (!peers || peers.length === 0) {
       var tr = document.createElement("tr");
       var td = document.createElement("td");
-      td.colSpan = 7;
+      td.colSpan = 8;
       td.className = "peers-empty";
       td.textContent = "No peers connected yet. Peer wires will appear here from live telemetry.";
       tr.appendChild(td);
       body.appendChild(tr);
+      setText("peersCountrySummary", "");
       return;
     }
+
+    // Tally top countries for header badge
+    var countryCounts = {};
+    peers.forEach(function (p) {
+      if (p.country) {
+        var key = (p.flag || "") + " " + p.country;
+        countryCounts[key] = (countryCounts[key] || 0) + 1;
+      }
+    });
+    var topCountries = Object.entries(countryCounts)
+      .sort(function (a, b) { return b[1] - a[1]; })
+      .slice(0, 6)
+      .map(function (pair) { return pair[0] + " (" + pair[1] + ")"; })
+      .join(" · ");
+    setText("peersCountrySummary", topCountries || "");
+
     peers.slice(0, 100).forEach(function (p) {
       var tr = document.createElement("tr");
       function cell(text, mono) {
@@ -3115,12 +3333,18 @@
         return td;
       }
       tr.appendChild(cell((p.ip || "—") + (p.port ? ":" + p.port : ""), true));
+
+      var cText = p.flag ? (p.flag + " " + (p.countryName || p.country || "")) : (p.country || "🌐 Global");
+      tr.appendChild(cell(cText));
+
       tr.appendChild(cell(p.client || "Unknown Peer"));
       tr.appendChild(cell(p.type || "tcp"));
       tr.appendChild(cell(fmtSpeed(p.downloadSpeed)));
       tr.appendChild(cell(fmtSpeed(p.uploadSpeed)));
       tr.appendChild(cell(fmtBytes(p.downloaded)));
-      tr.appendChild(cell(p.isChoked ? "Choked" : "Streaming"));
+
+      var role = p.isSeeder ? "Seeder (Active)" : (p.isChoked ? "Leecher (Choked)" : "Leecher (Active)");
+      tr.appendChild(cell(role));
       body.appendChild(tr);
     });
   }
@@ -3165,15 +3389,16 @@
     latestTorrents = torrents;
     var active = null;
     if (currentHash) {
-      active = torrents.find(function (t) { return t.infoHash && t.infoHash.toLowerCase() === currentHash.toLowerCase(); });
-      if (!active && data.activeTorrent && data.activeTorrent.infoHash && data.activeTorrent.infoHash.toLowerCase() === currentHash.toLowerCase()) {
+      var lowCurr = currentHash.toLowerCase();
+      active = torrents.find(function (t) { return t.infoHash && t.infoHash.toLowerCase() === lowCurr; });
+      if (!active && data.activeTorrent && data.activeTorrent.infoHash && data.activeTorrent.infoHash.toLowerCase() === lowCurr) {
         active = data.activeTorrent;
       }
     } else {
       active = data.activeTorrent || (torrents.length > 0 ? torrents[torrents.length - 1] : null);
     }
     if (active && !currentHash) {
-      currentHash = active.infoHash;
+      currentHash = active.infoHash ? active.infoHash.toLowerCase() : "";
     }
 
     var totalDown = data.global && data.global.totalDownloadSpeed != null
@@ -3195,15 +3420,31 @@
     setText("overviewPeers", String(totalPeers));
     setText("overviewSeeders", String(totalSeeds));
 
-    // GATE: nothing streaming / zero peers -> swarm fully idle, no title,
-    // no peers, no animation. The movie name only appears with real peers.
+    // GATE: nothing streaming / zero peers -> swarm visualizer stays idle without wiping title
     if (!active || !hasPeers) {
       liveState.connected = torrents.length > 0;
       liveState.totalMbps = toMbps(totalDown);
       liveState.peersList = [];
-      setSwarmIdle();
+      setSwarmIdle(Boolean(active || currentHash));
       renderActiveStreams(torrents);
       renderPeersTable(active && active.peers ? active.peers : []);
+      if (active) {
+        var resName = (active.cleanTitle && !active.cleanTitle.includes("Resolving metadata")) ? active.cleanTitle : (active.name && !active.name.includes("Resolving metadata") ? cleanTitle(active.name) : currentTitle);
+        if (resName) currentTitle = resName;
+        setText("torrent1Title", currentTitle);
+        var d = extractDetails(active.name || currentMagnet.dn || "");
+        if (d) setText("torrent1Sub", d);
+        setText("client1Sub", currentTitle);
+        setNowPlaying(currentTitle, (d ? d + " · " : "") + toMbps(active.downloadSpeed || 0).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers");
+        setText("videoTitle", currentTitle);
+        if (active.activeFileName) {
+          setText("activeFileName", active.activeFileName);
+          var lowerName = active.activeFileName.toLowerCase();
+          if (lowerName.endsWith(".mkv") || lowerName.endsWith(".avi") || lowerName.endsWith(".ts")) {
+            showCodecFallback("MKV / 4K HEVC Container", "Web browsers (Safari/Chrome) cannot decode <strong>.mkv</strong> containers natively. Your local StreamEntity engine is actively connected to swarm peers and serving over LAN. Tap below to stream smoothly in <strong>VLC</strong> or <strong>Infuse</strong>:");
+          }
+        }
+      }
       if (currentTab === "radar") drawRadar();
       if (currentTab === "timeline") drawTimeline();
       return;
@@ -3238,12 +3479,31 @@
     setText("client1Sub", title);
 
     if (active && (!currentHash || (active.infoHash && active.infoHash.toLowerCase() === currentHash.toLowerCase()))) {
-      if (active.cleanTitle) currentTitle = active.cleanTitle;
-      setNowPlaying(title,
+      if (active.cleanTitle && !active.cleanTitle.includes("Resolving metadata")) {
+        currentTitle = active.cleanTitle;
+      } else if (active.name && !active.name.includes("Resolving metadata")) {
+        currentTitle = cleanTitle(active.name);
+      }
+      var displayTitle = currentTitle;
+      setNowPlaying(displayTitle,
         (details ? details + " · " : "") +
         toMbps(active.downloadSpeed).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers");
-      setText("videoTitle", title);
-      if (active.activeFileName) setText("activeFileName", active.activeFileName);
+      setText("videoTitle", displayTitle);
+      if (active.activeFileName) {
+        setText("activeFileName", active.activeFileName);
+        var lowerName = active.activeFileName.toLowerCase();
+        if (lowerName.endsWith(".mkv") || lowerName.endsWith(".avi") || lowerName.endsWith(".ts")) {
+          showCodecFallback("MKV / 4K HEVC Container", "Web browsers (Safari/Chrome) cannot decode <strong>.mkv</strong> containers natively. Your local StreamEntity engine is actively connected to swarm peers and serving over LAN. Tap below to stream smoothly in <strong>VLC</strong> or <strong>Infuse</strong>:");
+        }
+      }
+
+      // If active torrent is ready with files, ensure player has src attached
+      if (active.ready && currentStreamUrl && (!video.src || video.src === "" || video.error)) {
+        if (!container.classList.contains("paused")) {
+          video.src = currentStreamUrl;
+          video.play().catch(function () {});
+        }
+      }
     }
     var pm = active.pieceMap;
     if (pm) {
@@ -3310,7 +3570,7 @@
     currentMagnet = info;
     currentTitle = cleanTitle(info.dn) || info.dn || (info.hash ? "Torrent (" + info.hash.substring(0, 8) + "...)" : "New Stream");
     if (info.hash) {
-      currentHash = info.hash;
+      currentHash = info.hash.toLowerCase();
     }
     if (info.dn) {
       var b = badgesFromName(info.dn);
@@ -3320,9 +3580,10 @@
   }
 
   function startStream(torrentId) {
+    hideCodecFallback();
     var info = parseMagnet(torrentId);
     if (info.hash) {
-      currentHash = info.hash;
+      currentHash = info.hash.toLowerCase();
     }
     applyMagnetLocally(info);
     recordHistory(torrentId, info);
@@ -3334,9 +3595,9 @@
     $("videoStatus").classList.remove("idle");
 
     // Immediately subscribe on WebSocket for this torrent
-    if (ws && ws.readyState === WebSocket.OPEN && currentHash) {
+    if (activeWs && activeWs.readyState === WebSocket.OPEN && currentHash) {
       try {
-        ws.send(JSON.stringify({ type: "subscribe", infoHash: currentHash }));
+        activeWs.send(JSON.stringify({ type: "subscribe", infoHash: currentHash.toLowerCase() }));
       } catch (e) {}
     }
 
@@ -3350,10 +3611,12 @@
     }).then(function (data) {
       if (!data.success || !data.torrent) throw new Error("add failed");
       var t = data.torrent;
-      currentHash = t.infoHash;
+      currentHash = t.infoHash ? t.infoHash.toLowerCase() : currentHash;
       currentStreamUrl = getApiUrl("/stream/" + currentHash);
-      if (t.cleanTitle || t.name) {
-        currentTitle = t.cleanTitle || t.name;
+      if (t.cleanTitle && !t.cleanTitle.includes("Resolving metadata")) {
+        currentTitle = t.cleanTitle;
+      } else if (t.name && !t.name.includes("Resolving metadata")) {
+        currentTitle = cleanTitle(t.name);
       }
       $("emptyPlayerState").style.display = "none";
       container.classList.add("has-media");
@@ -3372,9 +3635,9 @@
       syncNowPlayingControls();
 
       // Refresh WS subscription with confirmed infoHash
-      if (ws && ws.readyState === WebSocket.OPEN) {
+      if (activeWs && activeWs.readyState === WebSocket.OPEN && currentHash) {
         try {
-          ws.send(JSON.stringify({ type: "subscribe", infoHash: currentHash }));
+          activeWs.send(JSON.stringify({ type: "subscribe", infoHash: currentHash.toLowerCase() }));
         } catch (e) {}
       }
     }).catch(function () {
@@ -3712,7 +3975,11 @@
         val = "https://" + val;
       }
       localStorage.setItem("streamentity_backend_url", val);
-      toast("Saved cloud backend: " + val);
+      if (val.includes("onrender.com")) {
+        toast("Notice: Render free tier blocks BitTorrent traffic. For active streams, use your local PC server.");
+      } else {
+        toast("Saved cloud backend: " + val);
+      }
       closeServerModal();
       checkServer();
       fetchActiveTorrents();

@@ -2,7 +2,17 @@ import WebTorrent from 'webtorrent';
 import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
+import geoip from 'geoip-country';
 import { PieceScheduler } from './scheduler.js';
+
+function getFlagEmoji(countryCode) {
+  if (!countryCode || countryCode.length !== 2) return '🌐';
+  const codePoints = countryCode
+    .toUpperCase()
+    .split('')
+    .map(char => 127397 + char.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
+}
 
 // Default high-performance open trackers for maximal swarm discovery
 export const DEFAULT_TRACKERS = [
@@ -57,8 +67,9 @@ export class StreamEntityEngine extends EventEmitter {
     // Check if already present in our active torrents map
     const existing = await this.client.get(normalizedId);
     if (existing) {
-      if (!this.torrents.has(existing.infoHash)) {
-        this.torrents.set(existing.infoHash, existing);
+      const lowHash = String(existing.infoHash || '').toLowerCase().trim();
+      if (!this.torrents.has(lowHash)) {
+        this.torrents.set(lowHash, existing);
         this.setupTorrent(existing, options.fileIndex);
       }
       return this.formatTorrentSummary(existing);
@@ -76,7 +87,8 @@ export class StreamEntityEngine extends EventEmitter {
 
         const onRegistered = () => {
           if (torrent.infoHash) {
-            this.torrents.set(torrent.infoHash, torrent);
+            const lowHash = String(torrent.infoHash).toLowerCase().trim();
+            this.torrents.set(lowHash, torrent);
           }
           this.setupTorrent(torrent, options.fileIndex);
           resolve(this.formatTorrentSummary(torrent));
@@ -143,12 +155,17 @@ export class StreamEntityEngine extends EventEmitter {
           }
         });
 
-        this.primaryFiles.set(torrent.infoHash, { file: selectedFile, index: selectedIndex });
+        // Explicitly select the chosen media file so WebTorrent actively requests pieces
+        selectedFile.select();
+
+        const lowHash = String(torrent.infoHash || '').toLowerCase().trim();
+        this.primaryFiles.set(lowHash, { file: selectedFile, index: selectedIndex });
 
         // Initialize Tiramisu-style Piece Scheduler
         const scheduler = new PieceScheduler(torrent, selectedFile);
-        this.schedulers.set(torrent.infoHash, scheduler);
+        this.schedulers.set(lowHash, scheduler);
         console.log(`[StreamEntity]: Initialized Sequential Scheduler for "${selectedFile.name}" (${(selectedFile.length / 1024 / 1024).toFixed(1)} MB)`);
+        this.emit('metadata', { torrentHash: lowHash, torrent });
       }
     };
 
@@ -159,7 +176,8 @@ export class StreamEntityEngine extends EventEmitter {
     }
 
     torrent.on('wire', (wire, addr) => {
-      this.emit('wire', { torrentHash: torrent.infoHash, wire, addr });
+      const lowHash = String(torrent.infoHash || '').toLowerCase().trim();
+      this.emit('wire', { torrentHash: lowHash, wire, addr });
     });
   }
 
@@ -167,17 +185,20 @@ export class StreamEntityEngine extends EventEmitter {
    * Get primary streaming file and its piece scheduler
    */
   getStreamingContext(infoHash, fileIndex) {
-    const torrent = this.torrents.get(infoHash);
+    const key = String(infoHash || '').toLowerCase().trim();
+    const torrent = this.torrents.get(key) || (this.client ? this.client.get(key) : null);
     if (!torrent) return null;
 
-    let primary = this.primaryFiles.get(infoHash);
+    let primary = this.primaryFiles.get(key);
     if (!primary || (fileIndex !== undefined && primary.index !== fileIndex)) {
-      const idx = fileIndex !== undefined ? fileIndex : 0;
-      const file = torrent.files[idx] || torrent.files[0];
-      if (file) {
-        primary = { file, index: idx };
-        this.primaryFiles.set(infoHash, primary);
-        this.schedulers.set(infoHash, new PieceScheduler(torrent, file));
+      if (torrent.files && torrent.files.length > 0) {
+        const idx = fileIndex !== undefined ? fileIndex : 0;
+        const file = torrent.files[idx] || torrent.files[0];
+        if (file) {
+          primary = { file, index: idx };
+          this.primaryFiles.set(key, primary);
+          this.schedulers.set(key, new PieceScheduler(torrent, file));
+        }
       }
     }
 
@@ -185,7 +206,7 @@ export class StreamEntityEngine extends EventEmitter {
       torrent,
       file: primary?.file,
       fileIndex: primary?.index,
-      scheduler: this.schedulers.get(infoHash)
+      scheduler: this.schedulers.get(key)
     };
   }
 
@@ -249,23 +270,48 @@ export class StreamEntityEngine extends EventEmitter {
    * Detailed Swarm Telemetry for Live 60 FPS Visualizer
    */
   getSwarmTelemetry(infoHash) {
-    const ctx = this.getStreamingContext(infoHash);
+    const key = String(infoHash || '').toLowerCase().trim();
+    const ctx = this.getStreamingContext(key);
     if (!ctx || !ctx.torrent) return null;
 
     const { torrent, file, scheduler } = ctx;
+    const rawName = torrent.name || (file ? file.name : '') || '';
+    const clean = cleanMediaTitle(rawName);
 
-    // Build peers list with client parsing & live throughput
+    // Build peers list with client parsing, live throughput & GeoIP country resolution
     const peers = [];
+    const countryStats = {};
+    let seederCount = 0;
+    let leecherCount = 0;
+
     if (torrent.wires) {
       for (const wire of torrent.wires) {
         const clientName = wire.peerExtendedHandshake?.v || wire.client || parseClientFromPeerId(wire.peerId) || 'Unknown Peer';
         const dSpeed = typeof wire.downloadSpeed === 'function' ? wire.downloadSpeed() : (wire.downloadSpeed || 0);
         const uSpeed = typeof wire.uploadSpeed === 'function' ? wire.uploadSpeed() : (wire.uploadSpeed || 0);
 
+        const rawIp = wire.remoteAddress || '127.0.0.1';
+        const cleanIp = rawIp.replace(/^::ffff:/, '');
+        const geo = cleanIp && cleanIp !== '127.0.0.1' ? geoip.lookup(cleanIp) : null;
+        const countryCode = geo?.country || '';
+        const countryName = geo?.name || '';
+        const flag = countryCode ? getFlagEmoji(countryCode) : '🌐';
+
+        const isSeeder = !wire.peerChoking;
+        if (isSeeder) seederCount++;
+        else leecherCount++;
+
+        if (countryCode) {
+          countryStats[countryCode] = (countryStats[countryCode] || 0) + 1;
+        }
+
         peers.push({
           id: wire.peerId ? wire.peerId.toString('hex').slice(0, 16) : Math.random().toString(36).slice(2, 10),
-          ip: wire.remoteAddress || '127.0.0.1',
+          ip: cleanIp,
           port: wire.remotePort || 0,
+          country: countryCode,
+          countryName: countryName,
+          flag: flag,
           client: clientName,
           type: wire.type || 'tcp',
           downloadSpeed: dSpeed,
@@ -273,6 +319,8 @@ export class StreamEntityEngine extends EventEmitter {
           downloaded: wire.downloaded || 0,
           uploaded: wire.uploaded || 0,
           isChoked: Boolean(wire.peerChoking),
+          isSeeder: isSeeder,
+          isLeecher: !isSeeder,
           isInterested: Boolean(wire.peerInterested),
           requestsCount: wire.requests ? wire.requests.length : 0
         });
@@ -283,8 +331,12 @@ export class StreamEntityEngine extends EventEmitter {
 
     return {
       infoHash: torrent.infoHash,
-      name: torrent.name,
+      name: rawName,
+      cleanTitle: clean,
       numPeers: torrent.numPeers || peers.length,
+      numSeeds: seederCount,
+      numLeechers: leecherCount,
+      countryStats,
       downloadSpeed: torrent.downloadSpeed || 0,
       uploadSpeed: torrent.uploadSpeed || 0,
       progress: torrent.progress || 0,
@@ -304,12 +356,13 @@ export class StreamEntityEngine extends EventEmitter {
    */
   async removeTorrent(infoHash, destroyFiles = false) {
     return new Promise((resolve) => {
-      const torrent = this.torrents.get(infoHash) || this.client.get(infoHash);
+      const key = String(infoHash || '').toLowerCase().trim();
+      const torrent = this.torrents.get(key) || (this.client ? this.client.get(key) : null);
       if (!torrent) return resolve(false);
 
-      this.torrents.delete(infoHash);
-      this.schedulers.delete(infoHash);
-      this.primaryFiles.delete(infoHash);
+      this.torrents.delete(key);
+      this.schedulers.delete(key);
+      this.primaryFiles.delete(key);
 
       torrent.destroy({ destroyStore: destroyFiles }, () => {
         resolve(true);
@@ -321,7 +374,8 @@ export class StreamEntityEngine extends EventEmitter {
    * Pause a torrent
    */
   pauseTorrent(infoHash) {
-    const torrent = this.torrents.get(infoHash) || this.client.get(infoHash);
+    const key = String(infoHash || '').toLowerCase().trim();
+    const torrent = this.torrents.get(key) || (this.client ? this.client.get(key) : null);
     if (!torrent) return false;
     if (typeof torrent.pause === 'function') {
       try { torrent.pause(); } catch (e) {}
@@ -334,7 +388,8 @@ export class StreamEntityEngine extends EventEmitter {
    * Resume a torrent
    */
   resumeTorrent(infoHash) {
-    const torrent = this.torrents.get(infoHash) || this.client.get(infoHash);
+    const key = String(infoHash || '').toLowerCase().trim();
+    const torrent = this.torrents.get(key) || (this.client ? this.client.get(key) : null);
     if (!torrent) return false;
     if (typeof torrent.resume === 'function') {
       try { torrent.resume(); } catch (e) {}

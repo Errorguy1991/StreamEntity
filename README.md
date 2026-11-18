@@ -2,8 +2,18 @@
 
 - **Live Web App**: [https://streamentity.web.app](https://streamentity.web.app)
 - **GitHub Repository**: [https://github.com/Errorguy1991/StreamEntity](https://github.com/Errorguy1991/StreamEntity)
+- **📱 Android APK (Direct Download)**: [Download StreamEntity-debug.apk](https://github.com/Errorguy1991/StreamEntity/releases/download/v1.0.0-android/StreamEntity-debug.apk) | [View Release](https://github.com/Errorguy1991/StreamEntity/releases/tag/v1.0.0-android)
 
 StreamEntity is a hybrid sequential BitTorrent streaming engine with live peer swarm visualization, FUSE piece buffer management, and cross-device support (Desktop, iPad, Android).
+
+---
+
+## 📱 Standalone Android App (No PC Required)
+
+The Android app features an embedded native **jlibtorrent** C++ engine and local HTTP streaming server running directly on your phone (`127.0.0.1:3000`):
+- Connects directly to BitTorrent swarms and UDP trackers over Wi-Fi or 4G/5G mobile data.
+- Stream sequential video on your phone or handoff to external players like VLC or MX Player with one tap.
+- **[Download APK (v1.0.0)](https://github.com/Errorguy1991/StreamEntity/releases/download/v1.0.0-android/StreamEntity-debug.apk)**
 
 ---
 

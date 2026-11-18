@@ -6,6 +6,8 @@
       "**/.*",
       "**/node_modules/**",
       "cache/**",
+      "android/**",
+      "*.apk",
       "*.bat",
       "package.json",
       "package-lock.json",

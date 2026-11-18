@@ -1,0 +1,25 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "cache/**",
+      "*.bat",
+      "package.json",
+      "package-lock.json",
+      "README.md",
+      "server.js",
+      "engine.js",
+      "scheduler.js",
+      "vlc-launcher.js"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

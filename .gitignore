@@ -1,0 +1,7 @@
+node_modules/
+cache/
+*.log
+.DS_Store
+create_repo.ps1
+upload_files.ps1
+get_cred.ps1

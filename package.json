@@ -1,0 +1,17 @@
+{
+  "name": "streamentity",
+  "version": "1.0.0",
+  "description": "StreamEntity - Native BitTorrent Sequential Streaming Engine & Swarm Visualizer",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mime-types": "^2.1.35",
+    "qrcode": "^1.5.4",
+    "webtorrent": "^2.6.2",
+    "ws": "^8.18.0"
+  }
+}

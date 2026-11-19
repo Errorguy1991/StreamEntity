@@ -157,8 +157,20 @@ app.delete('/api/torrents/:infoHash', async (req, res) => {
   try {
     const { infoHash } = req.params;
     const { deleteFiles } = req.query;
-    await hlsManager.stopSession(infoHash);
-    const success = await engine.removeTorrent(infoHash, deleteFiles === 'true');
+    const lowHash = String(infoHash || '').toLowerCase().trim();
+    await hlsManager.stopSession(lowHash);
+    const success = await engine.removeTorrent(lowHash, deleteFiles === 'true');
+    if (lastActiveInfoHash && lastActiveInfoHash.toLowerCase() === lowHash) {
+      lastActiveInfoHash = null;
+    }
+    for (const [ws, sub] of activeSubscriptions.entries()) {
+      if (sub && sub.toLowerCase() === lowHash) {
+        activeSubscriptions.delete(ws);
+      }
+    }
+    wss.clients.forEach(c => {
+      if (c.readyState === 1) sendSwarmSnapshot(c);
+    });
     res.json({ success });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -221,6 +233,9 @@ app.get('/api/qrcode', async (req, res) => {
 // Live Swarm Telemetry endpoint for Live Swarm Animation
 app.get('/api/swarm', (req, res) => {
   const torrents = engine.listTorrents();
+  if (torrents.length === 0) {
+    lastActiveInfoHash = null;
+  }
   let totalDown = 0;
   let totalUp = 0;
   let totalPeers = 0;
@@ -590,6 +605,9 @@ engine.on('metadata', ({ torrentHash, torrent }) => {
 function sendSwarmSnapshot(ws) {
   if (ws.readyState !== ws.OPEN) return;
   const torrents = engine.listTorrents();
+  if (torrents.length === 0) {
+    lastActiveInfoHash = null;
+  }
   let totalDown = 0;
   let totalUp = 0;
   let totalPeers = 0;
@@ -635,6 +653,9 @@ setInterval(() => {
   if (wss.clients.size === 0) return;
 
   const torrents = engine.listTorrents();
+  if (torrents.length === 0) {
+    lastActiveInfoHash = null;
+  }
   let totalDown = 0;
   let totalUp = 0;
   let totalPeers = 0;

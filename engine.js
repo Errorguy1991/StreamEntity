@@ -439,11 +439,68 @@ function extractBadges(name = '') {
   return badges;
 }
 
-function cleanMediaTitle(name = '') {
-  let title = name.replace(/\.(mp4|mkv|webm|avi|mov)$/i, '');
-  title = title.replace(/\b(1080p|2160p|720p|4k|hdr|dv|x264|x265|hevc|web-dl|bluray|hdrip|eac3|ddp|atmos|prolover|yify|rarbg)\b/gi, '');
-  title = title.replace(/[-_.]+/g, ' ').trim();
-  return title || name;
+function cleanMediaTitle(raw = '') {
+  if (!raw) return '';
+  let s = String(raw).trim();
+
+  // Strip file extension if present (.mkv, .mp4, etc.)
+  s = s.replace(/\.(mp4|mkv|webm|avi|mov|wmv|m4v|flv|vob|iso)$/i, '');
+
+  // Extract release year (1900-2099)
+  let year = '';
+  const yMatch = s.match(/(?:[\s\.\(\[\-_]|^)((?:19|20)\d{2})(?:[\s\.\)\]\-_]|$)/);
+  if (yMatch) {
+    year = yMatch[1];
+  }
+
+  // 1. Remove all bracketed contents [ ... ] and { ... } (tracker/release-group/spec tags)
+  s = s.replace(/\[[^\]]*\]/g, ' ');
+  s = s.replace(/\{[^\}]*\}/g, ' ');
+
+  // 2. Remove parenthesized content unless it's just the 4-digit year: (2026)
+  s = s.replace(/\((?!\s*(?:19|20)\d{2}\s*\))[^)]*\)/g, ' ');
+
+  // 3. Cut off at year or standard technical cutoff markers
+  if (year) {
+    const yIdx = s.search(new RegExp(`(?:[\\s\\.\\(\\[\\-_]|^)${year}(?:[\\s\\.\\)\\]\\-_]|$)`));
+    if (yIdx > 0) {
+      s = s.substring(0, yIdx);
+    }
+  }
+
+  const cutoffRegex = /\b(?:2160p|1080p|1080i|720p|576p|480p|4k|uhd|bluray|blu-ray|bdrip|brrip|web-dl|webdl|webrip|web|hdrip|hdtv|remux|imax|x264|x265|h\.?264|h\.?265|hevc|avc|10bit|8bit|hdr10\+|hdr10|hdr|dolby|dovi|dv|aac|ac3|eac3|ddp|dts|atmos|truehd|yts|yify|rarbg|eztv|tgx|galaxyrg|flux|kyogo|terminal|cmrg|aspen|prolover)\b/i;
+  const cutMatch = s.search(cutoffRegex);
+  if (cutMatch > 0) {
+    s = s.substring(0, cutMatch);
+  }
+
+  // 4. Replace separators (. , _ +) with spaces
+  s = s.replace(/[\._\+]/g, ' ');
+
+  // 5. Remove any leftover empty brackets () [] {}
+  s = s.replace(/[\(\)\[\]\{\}]/g, ' ');
+
+  // 6. Clean leading/trailing punctuation and whitespace
+  s = s.replace(/^[\s\-\–—:,\.]+/, '').replace(/[\s\-\–—:,\.]+$/, '').trim();
+  s = s.replace(/\s+/g, ' ');
+
+  // 7. Title-case words nicely
+  if (s) {
+    s = s.split(' ').map(w => {
+      if (/^s\d+e\d+$/i.test(w)) return w.toUpperCase();
+      if (/^[A-Z0-9]{2,}$/.test(w)) return w;
+      if (w.includes('-')) {
+        return w.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join('-');
+      }
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    }).join(' ');
+
+    if (year && !s.includes(year)) {
+      s = `${s} (${year})`;
+    }
+  }
+
+  return s || raw;
 }
 
 function extractYear(name = '') {

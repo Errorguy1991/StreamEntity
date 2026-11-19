@@ -280,10 +280,13 @@
   .now-playing-btn.highlight{background:var(--cta-bg);color:var(--cta-color);border-color:var(--cta-bg)}
   .now-playing-btn.remove-btn{color:#ff453a;border-color:rgba(255,69,58,.3)}
   .now-playing-btn.remove-btn:not(:disabled):hover{background:rgba(255,69,58,.16);color:#ff453a;border-color:rgba(255,69,58,.5)}
-  .now-playing-dot{width:9px;height:9px;border-radius:50%;background:var(--text-3);flex:none}
+  .now-playing-dot{width:9px;height:9px;border-radius:50%;background:var(--text-3);flex:none;transition:background .3s ease,box-shadow .3s ease}
   .now-playing-panel.live .now-playing-dot{background:var(--green);box-shadow:0 0 8px rgba(48,209,88,.8)}
+  .now-playing-panel.paused .now-playing-dot{background:#ff9f0a;box-shadow:0 0 8px rgba(255,159,10,.8)}
+  .now-playing-panel.live .now-playing-label{color:var(--green)}
+  .now-playing-panel.paused .now-playing-label{color:#ff9f0a}
   .now-playing-text{display:flex;flex-direction:column;gap:1px;min-width:0}
-  .now-playing-label{font-size:10px;font-weight:700;letter-spacing:.13em;color:var(--text-2)}
+  .now-playing-label{font-size:10px;font-weight:700;letter-spacing:.13em;color:var(--text-2);transition:color .3s ease}
   .now-playing-title{font-size:16px;font-weight:700;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .now-playing-meta{font-size:12px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
@@ -1157,10 +1160,24 @@
         <div class="now-playing-left">
           <span class="now-playing-dot" aria-hidden="true"></span>
           <div class="now-playing-text">
-            <span class="now-playing-label">NOW STREAMING</span>
+            <span class="now-playing-label" id="nowPlayingLabel">STANDBY</span>
             <span class="now-playing-title" id="nowPlayingTitle">No active stream</span>
             <span class="now-playing-meta" id="nowPlayingMeta">The movie or series name from your magnet link will appear here once streaming starts.</span>
           </div>
+        </div>
+        <div class="now-playing-actions" id="nowPlayingActions">
+          <button type="button" class="now-playing-btn" id="btnNowPlayingPause" title="Pause stream" disabled>
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            <span>Pause</span>
+          </button>
+          <button type="button" class="now-playing-btn" id="btnNowPlayingResume" title="Resume stream" disabled>
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <span>Resume</span>
+          </button>
+          <button type="button" class="now-playing-btn remove-btn" id="btnNowPlayingRemove" title="Stop & remove stream" disabled>
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <span>Remove</span>
+          </button>
         </div>
       </aside>
       </div>
@@ -1754,20 +1771,68 @@
      becomes "KGF - Chapter 2" — everything from the year (or the
      first quality token) onward is dropped, separators cleaned,
      acronyms like K.G.F kept dotted. */
-  function cleanTitle(dn) {
-    if (!dn) return "";
-    var part = dn.replace(/\[[^\]]*\]/g, " ");
-    var m = part.match(/\b(?:19|20)\d{2}\b/);
-    if (m) {
-      part = part.slice(0, m.index);
-    } else {
-      var q = part.match(/\b(?:2160p|1080p|720p|480p|HDRip|WEB-DL|WEBRip|BluRay|HDTV|x264|x265|HEVC)\b/i);
-      if (q) part = part.slice(0, q.index);
+  function cleanTitle(raw) {
+    if (!raw) return "";
+    var s = String(raw).trim();
+
+    // Strip file extension if present (.mkv, .mp4, etc.)
+    s = s.replace(/\.(mp4|mkv|webm|avi|mov|wmv|m4v|flv|vob|iso)$/i, "");
+
+    // Extract release year (1900-2099)
+    var year = "";
+    var yMatch = s.match(/(?:[\s\.\(\[\-_]|^)((?:19|20)\d{2})(?:[\s\.\)\]\-_]|$)/);
+    if (yMatch) {
+      year = yMatch[1];
     }
-    part = part.replace(/[+_]+/g, " ").replace(/\.+/g, " ").replace(/\s+/g, " ").trim();
-    part = part.replace(/[\s\-–—(\[]+$/, "").trim();
-    part = part.replace(/\b(?:[A-Z]\s){2,}[A-Z]\b/g, function (s) { return s.replace(/\s/g, "."); });
-    return part || dn;
+
+    // 1. Remove all bracketed contents [ ... ] and { ... } (tracker/release-group/spec tags)
+    s = s.replace(/\[[^\]]*\]/g, " ");
+    s = s.replace(/\{[^\}]*\}/g, " ");
+
+    // 2. Remove parenthesized content unless it's just the 4-digit year: (2026)
+    s = s.replace(/\((?!\s*(?:19|20)\d{2}\s*\))[^)]*\)/g, " ");
+
+    // 3. Cut off at year or standard technical cutoff markers
+    if (year) {
+      var yIdx = s.search(new RegExp("(?:[\\s\\.\\(\\[\\-_]|^)" + year + "(?:[\\s\\.\\)\\]\\-_]|$)"));
+      if (yIdx > 0) {
+        s = s.substring(0, yIdx);
+      }
+    }
+
+    var cutoffRegex = /\b(?:2160p|1080p|1080i|720p|576p|480p|4k|uhd|bluray|blu-ray|bdrip|brrip|web-dl|webdl|webrip|web|hdrip|hdtv|remux|imax|x264|x265|h\.?264|h\.?265|hevc|avc|10bit|8bit|hdr10\+|hdr10|hdr|dolby|dovi|dv|aac|ac3|eac3|ddp|dts|atmos|truehd|yts|yify|rarbg|eztv|tgx|galaxyrg|flux|kyogo|terminal|cmrg|aspen|prolover)\b/i;
+    var cutMatch = s.search(cutoffRegex);
+    if (cutMatch > 0) {
+      s = s.substring(0, cutMatch);
+    }
+
+    // 4. Replace separators (. , _ +) with spaces
+    s = s.replace(/[\._\+]/g, " ");
+
+    // 5. Remove any leftover empty brackets () [] {}
+    s = s.replace(/[\(\)\[\]\{\}]/g, " ");
+
+    // 6. Clean leading/trailing punctuation and whitespace
+    s = s.replace(/^[\s\-\–—:,\.]+/, "").replace(/[\s\-\–—:,\.]+$/, "").trim();
+    s = s.replace(/\s+/g, " ");
+
+    // 7. Title-case words nicely
+    if (s) {
+      s = s.split(" ").map(function (w) {
+        if (/^s\d+e\d+$/i.test(w)) return w.toUpperCase();
+        if (/^[A-Z0-9]{2,}$/.test(w)) return w;
+        if (w.indexOf("-") !== -1) {
+          return w.split("-").map(function (part) { return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(); }).join("-");
+        }
+        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      }).join(" ");
+
+      if (year && s.indexOf(year) === -1) {
+        s = s + " (" + year + ")";
+      }
+    }
+
+    return s || raw;
   }
   function extractDetails(dn) {
     var out = [];
@@ -1793,16 +1858,28 @@
 
   /* Now-streaming panel below the player: shows only the clean
      movie / series name extracted from the magnet link. It stays
-     on its idle text until a stream actually starts. */
-  function setNowPlaying(title, meta) {
+     on its standby text until a stream actually starts, changes
+     to amber on pause, and returns to standby on removal. */
+  function setNowPlaying(title, meta, isPaused) {
     var panel = $("nowPlayingPanel");
     if (!panel) return;
-    if (title) {
-      panel.classList.add("live");
-      setText("nowPlayingTitle", title);
+    var labelEl = $("nowPlayingLabel") || panel.querySelector(".now-playing-label");
+    if (title && title !== "No active stream" && title !== "—") {
+      var clean = cleanTitle(title);
+      if (isPaused) {
+        panel.classList.remove("live");
+        panel.classList.add("paused");
+        if (labelEl) labelEl.textContent = "STREAM PAUSED";
+      } else {
+        panel.classList.remove("paused");
+        panel.classList.add("live");
+        if (labelEl) labelEl.textContent = "NOW STREAMING";
+      }
+      setText("nowPlayingTitle", clean);
       setText("nowPlayingMeta", meta || "");
     } else {
-      panel.classList.remove("live");
+      panel.classList.remove("live", "paused");
+      if (labelEl) labelEl.textContent = "STANDBY";
       setText("nowPlayingTitle", "No active stream");
       setText("nowPlayingMeta", "The movie or series name from your magnet link will appear here once streaming starts.");
     }
@@ -2762,6 +2839,7 @@
   function pauseStream(hash) {
     var targetHash = hash || currentHash || (latestTorrents && latestTorrents[0] ? latestTorrents[0].infoHash : null);
     if (!targetHash) return;
+    container.classList.add("user-paused");
     if ((!hash || hash === currentHash) && container.classList.contains("has-media")) {
       video.pause();
     }
@@ -2775,6 +2853,7 @@
   function resumeStream(hash) {
     var targetHash = hash || currentHash || (latestTorrents && latestTorrents[0] ? latestTorrents[0].infoHash : null);
     if (!targetHash) return;
+    container.classList.remove("user-paused");
     if (!container.classList.contains("has-media") || (hash && hash !== currentHash)) {
       playTorrentInPlayer(targetHash);
     } else {
@@ -2882,13 +2961,14 @@
     currentHash = infoHash;
     hideCodecFallback();
     destroyActiveHls();
+    container.classList.remove("user-paused");
 
     var t = latestTorrents ? latestTorrents.find(function (x) { return x.infoHash && x.infoHash.toLowerCase() === infoHash.toLowerCase(); }) : null;
     if (t && (t.cleanTitle || t.name)) {
-      currentTitle = t.cleanTitle || cleanTitle(t.name);
+      currentTitle = cleanTitle(t.cleanTitle || t.name);
     }
     setText("videoTitle", currentTitle);
-    setNowPlaying(currentTitle, t && t.name ? extractDetails(t.name) : "Connecting to stream…");
+    setNowPlaying(currentTitle, t && t.name ? extractDetails(t.name) : "Connecting to stream…", false);
 
     $("emptyPlayerState").style.display = "none";
     container.classList.add("has-media");
@@ -2942,7 +3022,7 @@
 
   function stopAndRemoveActiveStream(specificHash) {
     var hashToRemove = specificHash || currentHash || (latestTorrents && latestTorrents[0] ? latestTorrents[0].infoHash : null);
-    if (!specificHash || specificHash === currentHash) {
+    if (!specificHash || specificHash === currentHash || (latestTorrents && latestTorrents.length <= 1)) {
       clearTimeout(hudTimer);
       destroyActiveHls();
       hideCodecFallback();
@@ -2951,14 +3031,20 @@
       video.load();
       currentHash = null;
       currentStreamUrl = "";
-      container.classList.remove("has-media", "user-active");
+      currentTitle = "";
+      container.classList.remove("has-media", "user-active", "user-paused");
       $("emptyPlayerState").style.display = "flex";
       setText("videoStatus", "Idle");
       $("videoStatus").classList.add("idle");
       setText("videoTitle", "Active Stream");
       setText("activeFileName", "Waiting for stream...");
-      setNowPlaying("No active stream", "The movie or series name from your magnet link will appear here once streaming starts.");
-      setSwarmIdle();
+      setNowPlaying(null, null);
+      setSwarmIdle(false);
+      resetFuseReadout();
+      setText("torrent1Title", "—");
+      setText("torrent1Sub", "Waiting for magnet");
+      setText("torrent1Meta", "0 Mbps · 0 peers");
+      setText("client1Sub", "StreamEntity");
       syncNowPlayingControls();
     }
 
@@ -2982,12 +3068,20 @@
     $("iconPause").classList.toggle("hidden", !playing);
     container.classList.toggle("paused", !playing);
     syncNowPlayingControls();
+    if (currentHash && currentTitle) {
+      var isPaused = container.classList.contains("user-paused");
+      setNowPlaying(currentTitle, $("nowPlayingMeta") ? $("nowPlayingMeta").textContent : "", isPaused);
+    }
   }
   video.addEventListener("play", function () {
+    container.classList.remove("user-paused");
     syncPlayIcons();
     showHud();
   });
   video.addEventListener("pause", function () {
+    if (video.currentTime > 0 && !video.ended) {
+      container.classList.add("user-paused");
+    }
     syncPlayIcons();
     clearTimeout(hudTimer);
     container.classList.add("user-active");
@@ -3468,7 +3562,7 @@
       var entry = pieceMaps[t.infoHash];
       if (!entry) return;
       var row = entry.row;
-      row.querySelector('[data-role="title"]').textContent = t.cleanTitle || t.name || "—";
+      row.querySelector('[data-role="title"]').textContent = cleanTitle(t.cleanTitle || t.name) || "—";
       row.querySelector('[data-role="meta"]').textContent =
         toMbps(t.downloadSpeed).toFixed(1) + " Mbps · " + (t.numPeers || 0) + " peers · " +
         Math.round((t.progress || 0) * 100) + "%";
@@ -3612,6 +3706,38 @@
     setText("overviewPeers", String(totalPeers));
     setText("overviewSeeders", String(totalSeeds));
 
+    // When 0 active streams exist or all removed:
+    if (!torrents || torrents.length === 0) {
+      currentHash = null;
+      currentTitle = "";
+      currentStreamUrl = "";
+      destroyActiveHls();
+      if (container.classList.contains("has-media")) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+        container.classList.remove("has-media", "user-active", "user-paused");
+      }
+      $("emptyPlayerState").style.display = "flex";
+      setText("videoStatus", "Idle");
+      $("videoStatus").classList.add("idle");
+      setText("videoTitle", "Active Stream");
+      setText("activeFileName", "Waiting for stream...");
+      setNowPlaying(null, null);
+      setText("torrent1Title", "—");
+      setText("torrent1Sub", "Waiting for magnet");
+      setText("torrent1Meta", "0 Mbps · 0 peers");
+      setText("client1Sub", "StreamEntity");
+      resetFuseReadout();
+      setSwarmIdle(false);
+      renderActiveStreams([]);
+      renderPeersTable([]);
+      syncNowPlayingControls();
+      if (currentTab === "radar") drawRadar();
+      if (currentTab === "timeline") drawTimeline();
+      return;
+    }
+
     // GATE: nothing streaming / zero peers -> swarm visualizer stays idle without wiping title
     if (!active || !hasPeers) {
       liveState.connected = torrents.length > 0;
@@ -3621,13 +3747,15 @@
       renderActiveStreams(torrents);
       renderPeersTable(active && active.peers ? active.peers : []);
       if (active) {
-        var resName = (active.cleanTitle && !active.cleanTitle.includes("Resolving metadata")) ? active.cleanTitle : (active.name && !active.name.includes("Resolving metadata") ? cleanTitle(active.name) : currentTitle);
+        var rawName = active.cleanTitle || active.name || "";
+        var resName = (!rawName.includes("Resolving metadata")) ? cleanTitle(rawName) : currentTitle;
         if (resName) currentTitle = resName;
         setText("torrent1Title", currentTitle);
         var d = extractDetails(active.name || currentMagnet.dn || "");
         if (d) setText("torrent1Sub", d);
         setText("client1Sub", currentTitle);
-        setNowPlaying(currentTitle, (d ? d + " · " : "") + toMbps(active.downloadSpeed || 0).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers");
+        var isPaused = Boolean(active.paused || (container.classList.contains("has-media") && container.classList.contains("user-paused")));
+        setNowPlaying(currentTitle, (d ? d + " · " : "") + toMbps(active.downloadSpeed || 0).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers", isPaused);
         setText("videoTitle", currentTitle);
         if (active.activeFileName) setText("activeFileName", active.activeFileName);
         var isMkvFile = false;
@@ -3671,7 +3799,7 @@
     setText("swarmSeeders", String(totalSeeds));
 
     // Swarm torrent nodes — title/details come from the live torrent
-    var title = (active && (active.cleanTitle || cleanTitle(active.name || ""))) || currentTitle;
+    var title = (active && cleanTitle(active.cleanTitle || active.name || "")) || currentTitle;
     setText("torrent1Title", title);
     var details = extractDetails((active && active.name) || currentMagnet.dn || "");
     if (details) setText("torrent1Sub", details);
@@ -3683,15 +3811,15 @@
     setText("client1Sub", title);
 
     if (active && (!currentHash || (active.infoHash && active.infoHash.toLowerCase() === currentHash.toLowerCase()))) {
-      if (active.cleanTitle && !active.cleanTitle.includes("Resolving metadata")) {
-        currentTitle = active.cleanTitle;
-      } else if (active.name && !active.name.includes("Resolving metadata")) {
-        currentTitle = cleanTitle(active.name);
+      var rawName = active.cleanTitle || active.name || "";
+      if (!rawName.includes("Resolving metadata")) {
+        currentTitle = cleanTitle(rawName);
       }
       var displayTitle = currentTitle;
+      var isPaused = Boolean(active.paused || (container.classList.contains("has-media") && container.classList.contains("user-paused")));
       setNowPlaying(displayTitle,
         (details ? details + " · " : "") +
-        toMbps(active.downloadSpeed).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers");
+        toMbps(active.downloadSpeed).toFixed(1) + " Mbps · " + (active.numPeers || 0) + " peers", isPaused);
       setText("videoTitle", displayTitle);
       if (active.activeFileName) setText("activeFileName", active.activeFileName);
       var isMkvFile = false;
@@ -3744,12 +3872,12 @@
     }
     if (torrents[1]) {
       var t2 = torrents[1];
-      setText("torrent2Title", t2.cleanTitle || t2.name || "—");
+      setText("torrent2Title", cleanTitle(t2.cleanTitle || t2.name) || "—");
       setText("torrent2Sub", toMbps(t2.downloadSpeed).toFixed(1) + " Mbps · " + (t2.numPeers || 0) + " peers");
     }
     if (torrents[2]) {
       var t3 = torrents[2];
-      setText("torrent3Title", t3.cleanTitle || t3.name || "—");
+      setText("torrent3Title", cleanTitle(t3.cleanTitle || t3.name) || "—");
       setText("torrent3Sub", "idle · " + (t3.numPeers || 0) + " peers");
     }
     var clients = data.clients || [];
@@ -3828,10 +3956,9 @@
       if (!data.success || !data.torrent) throw new Error("add failed");
       var t = data.torrent;
       currentHash = t.infoHash ? t.infoHash.toLowerCase() : currentHash;
-      if (t.cleanTitle && !t.cleanTitle.includes("Resolving metadata")) {
-        currentTitle = t.cleanTitle;
-      } else if (t.name && !t.name.includes("Resolving metadata")) {
-        currentTitle = cleanTitle(t.name);
+      var rawName = t.cleanTitle || t.name || "";
+      if (!rawName.includes("Resolving metadata")) {
+        currentTitle = cleanTitle(rawName);
       }
       setText("videoTitle", currentTitle);
       setNowPlaying(currentTitle,

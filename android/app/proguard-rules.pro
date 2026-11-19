@@ -1,0 +1,2 @@
+-keep class com.frostwire.jlibtorrent.** { *; }
+-keep class fi.iki.elonen.** { *; }

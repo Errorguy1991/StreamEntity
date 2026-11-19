@@ -9,7 +9,6 @@
       "hls/**",
       "hls-manager.js",
       "android/**",
-      "*.apk",
       "*.bat",
       "package.json",
       "package-lock.json",

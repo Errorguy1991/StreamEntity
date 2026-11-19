@@ -4,6 +4,10 @@ hls/
 *.log
 .DS_Store
 *.apk
-android/
 .firebase/
 *.zip
+.gradle/
+**/build/
+android/.gradle/
+android/**/build/
+android/local.properties

@@ -3389,13 +3389,13 @@
     $("emptyPlayerState").style.display = "none";
     container.classList.add("has-media");
 
-    // Native Android App: Use hardware-accelerated Media3 ExoPlayer for MKV & all codecs
+    // Native Android App: Prepare stream, keep user on dashboard, and let user launch hardware player when ready
     if (window.StreamEntityNative && typeof window.StreamEntityNative.playMedia === "function") {
       currentStreamUrl = getApiUrl("/stream/" + currentHash);
-      window.StreamEntityNative.playMedia(currentStreamUrl, currentTitle);
-      setText("videoStatus", "Streaming (Hardware)");
+      setText("videoStatus", "Swarm Active");
       $("videoStatus").classList.remove("idle");
       syncNowPlayingControls();
+      showNativePlayerCard(currentTitle);
       return;
     }
 
@@ -3818,6 +3818,33 @@
     if (!currentHash) return "";
     var base = getBackendBase() || window.location.origin;
     return base.replace(/\/+$/, "") + "/stream/" + currentHash + "?raw=true";
+  }
+
+  function showNativePlayerCard(title) {
+    var overlay = $("codecFallbackOverlay");
+    if (!overlay) return;
+    overlay.classList.remove("hidden");
+    setText("codecFallbackBadgeText", "SWARM ACTIVE · DIRECT STREAM");
+    var titleEl = overlay.querySelector(".codec-fallback-title");
+    if (titleEl) titleEl.textContent = title || "Stream Ready";
+    $("codecFallbackDesc").innerHTML = "Torrent is streaming sequentially. You can monitor the live swarm & radar telemetry on this dashboard, or watch the video with hardware acceleration:";
+
+    var vlcBtn = $("btnOverlayVlc");
+    if (vlcBtn) {
+      vlcBtn.innerHTML = '<span style="font-size:15px;margin-right:4px;">▶</span> Watch Video (Hardware)';
+      vlcBtn.onclick = function (e) {
+        e.stopPropagation();
+        if (window.StreamEntityNative && typeof window.StreamEntityNative.playMedia === "function") {
+          window.StreamEntityNative.playMedia(currentStreamUrl, currentTitle);
+        }
+      };
+    }
+    if ($("btnOverlayInfuse")) {
+      $("btnOverlayInfuse").textContent = "Open in External Player";
+      $("btnOverlayInfuse").onclick = function () {
+        $("btnOpenVlc").click();
+      };
+    }
   }
 
   function showCodecFallback(badgeText, descText) {

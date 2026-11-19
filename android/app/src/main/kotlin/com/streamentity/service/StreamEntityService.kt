@@ -40,49 +40,53 @@ class StreamEntityService : Service() {
     }
 
     private fun startForegroundNotification() {
-        val channelId = "stream_entity_playback_channel"
-        val channelName = "StreamEntity Media Server"
+        try {
+            val channelId = "stream_entity_playback_channel"
+            val channelName = "StreamEntity Media Server"
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                channelName,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Background sequential streaming engine & local media server"
-                setShowBadge(false)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    channelId,
+                    channelName,
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Background sequential streaming engine & local media server"
+                    setShowBadge(false)
+                }
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.createNotificationChannel(channel)
             }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
 
-        val launchIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            launchIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("StreamEntity Engine")
-            .setContentText("Sequential streaming server running locally (127.0.0.1:3000)")
-            .setSmallIcon(applicationInfo.icon)
-            .setContentIntent(pendingIntent)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                1001,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            val launchIntent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                launchIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-        } else {
-            startForeground(1001, notification)
+
+            val notification: Notification = NotificationCompat.Builder(this, channelId)
+                .setContentTitle("StreamEntity Engine")
+                .setContentText("Sequential streaming server running locally (127.0.0.1:3000)")
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentIntent(pendingIntent)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    1001,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(1001, notification)
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "Foreground notification skipped (OEM/Permission policy): ${e.message}")
         }
     }
 

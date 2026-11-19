@@ -101,26 +101,30 @@ class TorrentEngine(private val context: Context) {
             override fun types(): IntArray? = null
 
             override fun alert(alert: Alert<*>) {
-                when (alert.type()) {
-                    AlertType.ADD_TORRENT -> {
-                        val a = alert as? AddTorrentAlert ?: return
-                        val h = a.handle()
-                        if (h != null && h.isValid) {
-                            h.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
-                            handles[h.infoHash().toHex().lowercase()] = h
-                            Log.d(TAG, "Torrent added & sequential download enabled: ${h.infoHash().toHex()}")
+                try {
+                    when (alert.type()) {
+                        AlertType.ADD_TORRENT -> {
+                            val a = alert as? AddTorrentAlert ?: return
+                            val h = a.handle()
+                            if (h != null && h.isValid) {
+                                h.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+                                handles[h.infoHash().toHex().lowercase()] = h
+                                Log.d(TAG, "Torrent added & sequential download enabled: ${h.infoHash().toHex()}")
+                            }
                         }
-                    }
-                    AlertType.METADATA_RECEIVED -> {
-                        val a = alert as? MetadataReceivedAlert ?: return
-                        val h = a.handle()
-                        if (h != null && h.isValid) {
-                            h.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
-                            prioritizeStreamingPieces(h)
-                            Log.d(TAG, "Metadata received for ${h.name}")
+                        AlertType.METADATA_RECEIVED -> {
+                            val a = alert as? MetadataReceivedAlert ?: return
+                            val h = a.handle()
+                            if (h != null && h.isValid) {
+                                h.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+                                prioritizeStreamingPieces(h)
+                                Log.d(TAG, "Metadata received for hash: ${h.infoHash().toHex()}")
+                            }
                         }
+                        else -> {}
                     }
-                    else -> {}
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Safe alert listener error", e)
                 }
             }
         })
@@ -389,7 +393,9 @@ class TorrentEngine(private val context: Context) {
             }
             val status: TorrentStatus = h.status()
             val ti: TorrentInfo? = try { h.torrentFile() } catch (e: Throwable) { null }
-            val rawName = if (ti != null && ti.name().isNotEmpty()) ti.name() else h.name.ifEmpty { "Torrent (${h.infoHash().toHex().take(8)})" }
+            val rawName = try { ti?.name()?.ifEmpty { null } } catch (e: Throwable) { null }
+                ?: try { status.name().ifEmpty { null } } catch (e: Throwable) { null }
+                ?: "Torrent (${try { h.infoHash().toHex().take(8) } catch (e: Throwable) { "" }})"
             val clean = cleanMediaTitle(rawName)
             val numPieces = ti?.numPieces() ?: 0
 

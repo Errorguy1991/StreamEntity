@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -68,6 +69,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Prevent unexpected crashes from killing the process
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e("StreamEntityCrash", "UNCAUGHT EXCEPTION in ${thread.name}: ${throwable.message}", throwable)
+        }
 
         // Keep screen on during active playback
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -196,6 +202,9 @@ class MainActivity : ComponentActivity() {
         exoPlayer = ExoPlayer.Builder(this).build().apply {
             playWhenReady = true
             addListener(object : Player.Listener {
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    Log.w("StreamEntityPlayer", "ExoPlayer playback notice: ${error.errorCodeName} - ${error.message}")
+                }
                 override fun onPlaybackStateChanged(state: Int) {
                     if (state == Player.STATE_ENDED) {
                         runOnUiThread { closeNativePlayer() }
@@ -281,22 +290,24 @@ class MainActivity : ComponentActivity() {
                     exoPlayer?.play()
 
                     playerContainer.visibility = View.VISIBLE
-                    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                    hideSystemUI()
                 } catch (e: Exception) {
-                    Toast.makeText(this@MainActivity, "Playback error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Log.e("MainActivity", "Playback start error", e)
                 }
             }
         }
 
         @JavascriptInterface
         fun pauseMedia() {
-            runOnUiThread { exoPlayer?.pause() }
+            runOnUiThread {
+                try { exoPlayer?.pause() } catch (e: Exception) {}
+            }
         }
 
         @JavascriptInterface
         fun resumeMedia() {
-            runOnUiThread { exoPlayer?.play() }
+            runOnUiThread {
+                try { exoPlayer?.play() } catch (e: Exception) {}
+            }
         }
 
         @JavascriptInterface
@@ -309,11 +320,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun closeNativePlayer() {
-        exoPlayer?.pause()
-        exoPlayer?.stop()
+        try {
+            exoPlayer?.pause()
+            exoPlayer?.stop()
+        } catch (e: Exception) {}
         playerContainer.visibility = View.GONE
-        showSystemUI()
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
     private fun handleVlcIntent(rawUrl: String) {

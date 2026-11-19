@@ -90,7 +90,7 @@ class StreamServer(
                 uri.startsWith("/api/torrents/") && uri.endsWith("/resume") && method == Method.POST -> handleResumeTorrent(uri)
                 uri.startsWith("/api/torrents/") && method == Method.DELETE -> handleDeleteTorrent(uri, session)
                 uri.startsWith("/stream/") -> handleStream(uri, session)
-                uri == "/" || uri == "/index.html" || uri.startsWith("/assets/") -> serveAsset("www/index.html", "text/html")
+                uri == "/" || uri == "/index.html" -> serveAsset("www/index.html", "text/html")
                 else -> {
                     val assetPath = "www" + if (uri.startsWith("/")) uri else "/$uri"
                     if (assetExists(assetPath)) {
@@ -176,16 +176,25 @@ class StreamServer(
     private fun handleStream(uri: String, session: IHTTPSession): Response {
         val parts = uri.substringAfter("/stream/").split("/")
         val infoHash = parts[0]
-        val file = engine.getDownloadedFile(infoHash)
 
-        val totalLength = if (file != null && file.exists()) {
-            file.length()
-        } else {
-            engine.getStreamingFileSize(infoHash)
+        // Allow up to 3 seconds for file and initial piece to begin buffering
+        var file = engine.getDownloadedFile(infoHash)
+        var totalLength = if (file != null && file.exists()) file.length() else engine.getStreamingFileSize(infoHash)
+        var waited = 0
+        while ((file == null || !file.exists() || totalLength <= 0) && waited < 3000) {
+            Thread.sleep(200)
+            waited += 200
+            file = engine.getDownloadedFile(infoHash)
+            totalLength = if (file != null && file.exists()) file.length() else engine.getStreamingFileSize(infoHash)
         }
 
         if (totalLength <= 0) {
-            val r = NanoHTTPD.newFixedLengthResponse(Status.NOT_FOUND, "text/plain", "Torrent stream not ready yet — resolving metadata.")
+            val r = NanoHTTPD.newFixedLengthResponse(
+                Status.SERVICE_UNAVAILABLE,
+                "application/json",
+                """{"error":"Torrent stream not ready yet — resolving metadata and buffering initial pieces."}"""
+            )
+            r.addHeader("Retry-After", "1")
             addCorsHeaders(r)
             return r
         }
@@ -222,36 +231,72 @@ class StreamServer(
         }
 
         // Full file response with Accept-Ranges
-        val stream = if (file != null && file.exists()) FileInputStream(file) else ByteArrayInputStream(ByteArray(0))
-        val r = NanoHTTPD.newFixedLengthResponse(Status.OK, mimeType, stream, totalLength)
+        val actualStreamLength = if (file != null && file.exists()) file.length() else 0L
+        val stream = if (actualStreamLength > 0) FileInputStream(file!!) else ByteArrayInputStream(ByteArray(0))
+        val r = NanoHTTPD.newFixedLengthResponse(Status.OK, mimeType, stream, actualStreamLength)
         r.addHeader("Accept-Ranges", "bytes")
-        r.addHeader("Content-Length", totalLength.toString())
+        r.addHeader("Content-Length", actualStreamLength.toString())
         addCorsHeaders(r)
         return r
     }
 
     private fun createPartialStream(file: File?, start: Long, length: Long): InputStream {
         if (file == null || !file.exists()) {
-            return ByteArrayInputStream(ByteArray(Math.min(length, 64 * 1024).toInt()))
+            return object : InputStream() {
+                private var bytesRemaining = length
+                override fun read(): Int {
+                    if (bytesRemaining <= 0) return -1
+                    bytesRemaining--
+                    return 0
+                }
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    if (bytesRemaining <= 0) return -1
+                    val toRead = Math.min(len.toLong(), bytesRemaining).toInt()
+                    b.fill(0, off, off + toRead)
+                    bytesRemaining -= toRead
+                    return toRead
+                }
+            }
         }
-        val raf = RandomAccessFile(file, "r")
-        raf.seek(start)
+        val raf = try { RandomAccessFile(file, "r") } catch (e: Exception) { null }
+        if (raf == null) {
+            return ByteArrayInputStream(ByteArray(0))
+        }
+        try {
+            val fileLen = raf.length()
+            val safeStart = Math.min(start, fileLen)
+            raf.seek(safeStart)
+        } catch (e: Exception) {}
+
         return object : InputStream() {
             private var bytesRemaining = length
 
             override fun read(): Int {
                 if (bytesRemaining <= 0) return -1
-                val b = raf.read()
-                if (b != -1) bytesRemaining--
-                return b
+                val b = try { raf.read() } catch (e: Exception) { -1 }
+                if (b != -1) {
+                    bytesRemaining--
+                    return b
+                }
+                // If sparse file EOF reached before contentLength, fill with 0x00
+                bytesRemaining--
+                return 0
             }
 
             override fun read(b: ByteArray, off: Int, len: Int): Int {
                 if (bytesRemaining <= 0) return -1
                 val toRead = Math.min(len.toLong(), bytesRemaining).toInt()
-                val read = raf.read(b, off, toRead)
-                if (read > 0) bytesRemaining -= read
-                return read
+                val read = try { raf.read(b, off, toRead) } catch (e: Exception) { -1 }
+                if (read > 0) {
+                    bytesRemaining -= read
+                    return read
+                } else if (read == -1) {
+                    // Sparse region or end of partial file: fill with 0s up to toRead
+                    b.fill(0, off, off + toRead)
+                    bytesRemaining -= toRead
+                    return toRead
+                }
+                return 0
             }
 
             override fun close() {

@@ -251,7 +251,7 @@ class TorrentEngine(private val context: Context) {
 
     fun getStreamingFileSize(infoHash: String): Long {
         val h = getHandle(infoHash) ?: return 0L
-        val ti = h.torrentFile() ?: return 0L
+        val ti = try { h.torrentFile() } catch (e: Throwable) { null } ?: return 0L
         val fs = ti.files()
         if (fs.numFiles() == 0) return 0L
 
@@ -261,6 +261,18 @@ class TorrentEngine(private val context: Context) {
             if (len > bestLen) bestLen = len
         }
         return bestLen
+    }
+
+    fun isStreamReady(infoHash: String): Boolean {
+        val h = getHandle(infoHash) ?: return false
+        if (!h.isValid) return false
+        val ti = try { h.torrentFile() } catch (e: Throwable) { null } ?: return false
+        if (ti.numPieces() <= 0) return false
+        val status = try { h.status() } catch (e: Throwable) { null } ?: return false
+        val pieces = try { status.pieces() } catch (e: Throwable) { null } ?: return false
+        val pSize = try { pieces.size() } catch (e: Throwable) { 0 }
+        if (pSize <= 0) return false
+        return try { pieces.getBit(0) } catch (e: Throwable) { false }
     }
 
     fun getTelemetry(): LiveTelemetry {
@@ -329,86 +341,150 @@ class TorrentEngine(private val context: Context) {
     }
 
     private fun prioritizeStreamingPieces(handle: TorrentHandle) {
-        val ti = handle.torrentFile() ?: return
-        val numPieces = ti.numPieces()
-        if (numPieces <= 0) return
+        try {
+            if (!handle.isValid) return
+            val ti = handle.torrentFile() ?: return
+            val numPieces = ti.numPieces()
+            if (numPieces <= 0) return
 
-        handle.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+            handle.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
 
-        // Give maximum priority to first 12 pieces and last 6 pieces (metadata, index table, moov/cues)
-        val firstCount = Math.min(12, numPieces)
-        for (i in 0 until firstCount) {
-            handle.piecePriority(i, Priority.TOP_PRIORITY)
-        }
-        val lastStart = Math.max(0, numPieces - 6)
-        for (i in lastStart until numPieces) {
-            handle.piecePriority(i, Priority.TOP_PRIORITY)
+            // Give maximum priority to first 12 pieces and last 6 pieces (metadata, index table, moov/cues)
+            val firstCount = Math.min(12, numPieces)
+            for (i in 0 until firstCount) {
+                handle.piecePriority(i, Priority.TOP_PRIORITY)
+            }
+            val lastStart = Math.max(0, numPieces - 6)
+            for (i in lastStart until numPieces) {
+                handle.piecePriority(i, Priority.TOP_PRIORITY)
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "Error setting piece priorities", e)
         }
     }
 
     private fun getSummary(h: TorrentHandle): TorrentSummary {
-        val status: TorrentStatus = h.status()
-        val ti: TorrentInfo? = h.torrentFile()
-        val rawName = if (ti != null && ti.name().isNotEmpty()) ti.name() else h.name.ifEmpty { "Torrent (${h.infoHash().toHex().take(8)})" }
-        val clean = cleanMediaTitle(rawName)
-        val numPieces = ti?.numPieces() ?: 0
-
-        val pieceStates = mutableListOf<Int>()
-        if (numPieces > 0) {
-            val pieces = status.pieces()
-            for (i in 0 until numPieces) {
-                if (pieces.getBit(i)) pieceStates.add(2) // Cached
-                else pieceStates.add(0) // Missing
+        try {
+            if (!h.isValid) {
+                return TorrentSummary(
+                    infoHash = h.infoHash().toHex().lowercase(),
+                    name = "Connecting…",
+                    cleanTitle = "Connecting…",
+                    badges = listOf("CONNECTING"),
+                    numPeers = 0,
+                    numSeeds = 0,
+                    downloadSpeed = 0.0,
+                    uploadSpeed = 0.0,
+                    progress = 0.0,
+                    downloaded = 0L,
+                    uploaded = 0L,
+                    totalLength = 0L,
+                    paused = false,
+                    ready = false,
+                    activeFileName = "",
+                    activeFileIndex = 0,
+                    pieceMap = null,
+                    leadTimeSeconds = 0
+                )
             }
-        }
+            val status: TorrentStatus = h.status()
+            val ti: TorrentInfo? = try { h.torrentFile() } catch (e: Throwable) { null }
+            val rawName = if (ti != null && ti.name().isNotEmpty()) ti.name() else h.name.ifEmpty { "Torrent (${h.infoHash().toHex().take(8)})" }
+            val clean = cleanMediaTitle(rawName)
+            val numPieces = ti?.numPieces() ?: 0
 
-        var activeFileIdx = 0
-        var activeFileName = ""
-        var totalLen = status.totalWanted()
-        if (ti != null && ti.files().numFiles() > 0) {
-            val fs = ti.files()
-            var maxLen = 0L
-            for (i in 0 until fs.numFiles()) {
-                val len = fs.fileSize(i)
-                if (len > maxLen) {
-                    maxLen = len
-                    activeFileIdx = i
-                    activeFileName = fs.fileName(i)
+            val pieceStates = mutableListOf<Int>()
+            if (numPieces > 0) {
+                try {
+                    val pieces = status.pieces()
+                    val pSize = if (pieces != null) pieces.size() else 0
+                    val limit = Math.min(numPieces, pSize)
+                    for (i in 0 until limit) {
+                        if (try { pieces.getBit(i) } catch (e: Throwable) { false }) {
+                            pieceStates.add(2) // Cached
+                        } else {
+                            pieceStates.add(0) // Missing
+                        }
+                    }
+                    for (i in limit until numPieces) {
+                        pieceStates.add(0)
+                    }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Safe piece status read", t)
+                    while (pieceStates.size < numPieces) pieceStates.add(0)
                 }
             }
-            totalLen = maxLen
+
+            var activeFileIdx = 0
+            var activeFileName = ""
+            var totalLen = status.totalWanted()
+            if (ti != null && ti.files().numFiles() > 0) {
+                val fs = ti.files()
+                var maxLen = 0L
+                for (i in 0 until fs.numFiles()) {
+                    val len = fs.fileSize(i)
+                    if (len > maxLen) {
+                        maxLen = len
+                        activeFileIdx = i
+                        activeFileName = fs.fileName(i)
+                    }
+                }
+                totalLen = maxLen
+            }
+
+            val dSpeed = status.downloadRate().toDouble()
+            val leadSeconds = if (dSpeed > 500_000) 180 else 45
+            val isPaused = status.flags().and_(TorrentFlags.PAUSED).non_zero()
+
+            return TorrentSummary(
+                infoHash = h.infoHash().toHex().lowercase(),
+                name = rawName,
+                cleanTitle = clean,
+                badges = extractBadges(rawName),
+                numPeers = status.numPeers(),
+                numSeeds = status.numSeeds(),
+                downloadSpeed = dSpeed,
+                uploadSpeed = status.uploadRate().toDouble(),
+                progress = status.progress().toDouble(),
+                downloaded = status.totalDone(),
+                uploaded = status.totalPayloadUpload(),
+                totalLength = totalLen,
+                paused = isPaused,
+                ready = ti != null,
+                activeFileName = activeFileName,
+                activeFileIndex = activeFileIdx,
+                pieceMap = if (numPieces > 0) PieceMapData(
+                    total = numPieces,
+                    fileStartPiece = 0,
+                    fileEndPiece = numPieces - 1,
+                    activePiece = 0,
+                    states = pieceStates
+                ) else null,
+                leadTimeSeconds = leadSeconds
+            )
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error generating torrent summary", e)
+            return TorrentSummary(
+                infoHash = try { h.infoHash().toHex().lowercase() } catch (t: Throwable) { "" },
+                name = "Connecting…",
+                cleanTitle = "Connecting…",
+                badges = listOf("CONNECTING"),
+                numPeers = 0,
+                numSeeds = 0,
+                downloadSpeed = 0.0,
+                uploadSpeed = 0.0,
+                progress = 0.0,
+                downloaded = 0L,
+                uploaded = 0L,
+                totalLength = 0L,
+                paused = false,
+                ready = false,
+                activeFileName = "",
+                activeFileIndex = 0,
+                pieceMap = null,
+                leadTimeSeconds = 0
+            )
         }
-
-        val dSpeed = status.downloadRate().toDouble()
-        val leadSeconds = if (dSpeed > 500_000) 180 else 45
-        val isPaused = status.flags().and_(TorrentFlags.PAUSED).non_zero()
-
-        return TorrentSummary(
-            infoHash = h.infoHash().toHex().lowercase(),
-            name = rawName,
-            cleanTitle = clean,
-            badges = extractBadges(rawName),
-            numPeers = status.numPeers(),
-            numSeeds = status.numSeeds(),
-            downloadSpeed = dSpeed,
-            uploadSpeed = status.uploadRate().toDouble(),
-            progress = status.progress().toDouble(),
-            downloaded = status.totalDone(),
-            uploaded = status.totalPayloadUpload(),
-            totalLength = totalLen,
-            paused = isPaused,
-            ready = ti != null,
-            activeFileName = activeFileName,
-            activeFileIndex = activeFileIdx,
-            pieceMap = if (numPieces > 0) PieceMapData(
-                total = numPieces,
-                fileStartPiece = 0,
-                fileEndPiece = numPieces - 1,
-                activePiece = 0,
-                states = pieceStates
-            ) else null,
-            leadTimeSeconds = leadSeconds
-        )
     }
 
     private fun parseInfoHash(uri: String): String? {

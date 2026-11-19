@@ -19,6 +19,7 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -26,19 +27,27 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import com.streamentity.service.StreamEntityService
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var rootContainer: FrameLayout
     private lateinit var webView: WebView
+    private lateinit var playerContainer: FrameLayout
+    private lateinit var playerView: PlayerView
+    private var exoPlayer: ExoPlayer? = null
     private var customViewContainer: FrameLayout? = null
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
-    private var originalSystemUiVisibility = 0
     private var isServiceBound = false
     private var serviceInstance: StreamEntityService? = null
     private val handler = Handler(Looper.getMainLooper())
@@ -182,12 +191,129 @@ class MainActivity : ComponentActivity() {
         }
 
         rootContainer.addView(webView)
+
+        // Native Hardware-Accelerated Media3 ExoPlayer for MKV / 4K HEVC / HDR / Multi-Audio
+        exoPlayer = ExoPlayer.Builder(this).build().apply {
+            playWhenReady = true
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_ENDED) {
+                        runOnUiThread { closeNativePlayer() }
+                    }
+                }
+            })
+        }
+
+        playerContainer = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.BLACK)
+            visibility = View.GONE
+        }
+
+        playerView = PlayerView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.BLACK)
+            useController = true
+            setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+            player = exoPlayer
+        }
+        playerContainer.addView(playerView)
+
+        // Sleek overlay top bar with Back / Close button
+        val topOverlay = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(40, 40, 40, 0)
+            }
+        }
+
+        val btnClose = TextView(this).apply {
+            text = "✕  Back to Dashboard"
+            textSize = 13.5f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#99000000"))
+            setPadding(36, 20, 36, 20)
+            setOnClickListener {
+                closeNativePlayer()
+            }
+        }
+        topOverlay.addView(btnClose)
+        playerContainer.addView(topOverlay)
+
+        rootContainer.addView(playerContainer)
+
+        // Native bridge for MKV hardware playback in index.html
+        webView.addJavascriptInterface(AndroidBridge(), "StreamEntityNative")
+
         setContentView(rootContainer)
 
         // Load local server root
         handler.postDelayed({
             webView.loadUrl("http://127.0.0.1:3000/")
         }, 150)
+    }
+
+    inner class AndroidBridge {
+        @JavascriptInterface
+        fun playMedia(streamUrl: String, title: String) {
+            runOnUiThread {
+                try {
+                    val fullUrl = if (streamUrl.startsWith("/")) "http://127.0.0.1:3000$streamUrl" else streamUrl
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(Uri.parse(fullUrl))
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(title)
+                                .build()
+                        )
+                        .build()
+
+                    exoPlayer?.setMediaItem(mediaItem)
+                    exoPlayer?.prepare()
+                    exoPlayer?.play()
+
+                    playerContainer.visibility = View.VISIBLE
+                    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    hideSystemUI()
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "Playback error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun pauseMedia() {
+            runOnUiThread { exoPlayer?.pause() }
+        }
+
+        @JavascriptInterface
+        fun resumeMedia() {
+            runOnUiThread { exoPlayer?.play() }
+        }
+
+        @JavascriptInterface
+        fun stopMedia() {
+            runOnUiThread { closeNativePlayer() }
+        }
+
+        @JavascriptInterface
+        fun isNativeApp(): Boolean = true
+    }
+
+    private fun closeNativePlayer() {
+        exoPlayer?.pause()
+        exoPlayer?.stop()
+        playerContainer.visibility = View.GONE
+        showSystemUI()
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
     private fun handleVlcIntent(rawUrl: String) {
@@ -217,7 +343,9 @@ class MainActivity : ComponentActivity() {
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (customView != null) {
+                if (playerContainer.visibility == View.VISIBLE) {
+                    closeNativePlayer()
+                } else if (customView != null) {
                     webView.webChromeClient?.onHideCustomView()
                 } else if (webView.canGoBack()) {
                     webView.goBack()
@@ -260,6 +388,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        try {
+            exoPlayer?.release()
+            exoPlayer = null
+        } catch (e: Exception) {}
         if (isServiceBound) {
             unbindService(serviceConnection)
             isServiceBound = false

@@ -126,7 +126,7 @@
     background:var(--header-bg);backdrop-filter:blur(22px) saturate(1.6);-webkit-backdrop-filter:blur(22px) saturate(1.6);
     border-bottom:1px solid var(--stroke-soft);
   }
-  .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .header-right{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
   /* Standalone dark/light toggle — same pill style as the view switcher, kept separate */
   .theme-toggle-btn{
     display:inline-flex;align-items:center;justify-content:center;
@@ -262,22 +262,22 @@
   .workspace-layout.view-split .player-container{flex:1 1 auto;height:100%;aspect-ratio:auto;min-height:260px}
   .workspace-layout.view-split .swarm-card{height:100%}
   .now-playing-panel{
-    display:none;align-items:center;justify-content:space-between;gap:14px;flex:none;
+    display:none;flex-direction:row;align-items:center;justify-content:space-between;gap:16px;flex:none;
     background:var(--panel);border:1px solid var(--stroke-soft);border-radius:var(--radius);
-    padding:13px 18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    padding:12px 18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     transition:opacity .25s ease, transform .25s ease;
   }
   .now-playing-panel.live,
   .now-playing-panel.paused{
     display:flex;
   }
-  .now-playing-left{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
-  .now-playing-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:none}
+  .now-playing-left{display:flex;align-items:center;gap:12px;min-width:0;flex:1 1 auto}
+  .now-playing-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
   .now-playing-btn{
-    display:inline-flex;align-items:center;gap:6px;
-    padding:7px 15px;border-radius:999px;font-size:12px;font-weight:600;
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;
     border:1px solid var(--stroke);background:var(--panel-strong);color:var(--text);
-    transition:all .2s ease;cursor:pointer;min-height:32px;
+    transition:all .2s ease;cursor:pointer;min-height:32px;white-space:nowrap;
   }
   .now-playing-btn:disabled{opacity:.4;cursor:not-allowed}
   .now-playing-btn:not(:disabled):hover{background:var(--panel);border-color:var(--stroke-soft);transform:scale(1.02)}
@@ -290,10 +290,25 @@
   .now-playing-panel.paused .now-playing-dot{background:#ff9f0a;box-shadow:0 0 8px rgba(255,159,10,.8)}
   .now-playing-panel.live .now-playing-label{color:var(--green)}
   .now-playing-panel.paused .now-playing-label{color:#ff9f0a}
-  .now-playing-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .now-playing-text{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto}
   .now-playing-label{font-size:10px;font-weight:700;letter-spacing:.13em;color:var(--text-2);transition:color .3s ease}
-  .now-playing-title{font-size:16px;font-weight:700;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .now-playing-meta{font-size:12px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .now-playing-title{font-size:15px;font-weight:700;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .now-playing-meta{font-size:11.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  @media (max-width: 640px) {
+    .now-playing-panel{
+      flex-direction:column;align-items:stretch;gap:12px;padding:14px;
+    }
+    .now-playing-left{
+      width:100%;min-width:0;
+    }
+    .now-playing-actions{
+      display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;width:100%;
+    }
+    .now-playing-btn{
+      width:100%;padding:8px 4px;font-size:11px;
+    }
+  }
 
   /* ================= Player ================= */
   .player-card{background:#000;border:1px solid var(--stroke-soft);border-radius:var(--radius);overflow:hidden}
@@ -914,15 +929,7 @@
         <span class="device-btn-text">iPad</span>
       </button>
 
-      <!-- Cloud / Server Connection Manager -->
-      <button type="button" id="btnServerSettings" class="theme-toggle-btn connect-device-btn" title="Cloud &amp; Server Settings" aria-label="Cloud &amp; Server Settings">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
-        </svg>
-        <span class="device-btn-text">Cloud</span>
-      </button>
-
-      <!-- Separate dark / light mode toggle, same pill style, not attached to the view switcher -->
+      <!-- Separate dark / light mode toggle, same pill style, in 1 row with others -->
       <button type="button" id="themeToggle" class="theme-toggle-btn" aria-pressed="true" aria-label="Switch to light mode" title="Switch to light mode">
         <svg id="themeIconSun" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
           <path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91l-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7l1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91l1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.81z"/>
@@ -3214,6 +3221,11 @@
       }
     }
   });
+  container.addEventListener("click", function () {
+    if (window.StreamEntityNative && typeof window.StreamEntityNative.playMedia === "function" && currentHash) {
+      window.StreamEntityNative.playMedia(getApiUrl("/stream/" + currentHash), currentTitle);
+    }
+  });
 
   /* ---- Active Stream / Now-Playing Controls (Pause, Resume, Remove) ---- */
   var btnNpPause = $("btnNowPlayingPause");
@@ -3377,6 +3389,16 @@
     $("emptyPlayerState").style.display = "none";
     container.classList.add("has-media");
 
+    // Native Android App: Use hardware-accelerated Media3 ExoPlayer for MKV & all codecs
+    if (window.StreamEntityNative && typeof window.StreamEntityNative.playMedia === "function") {
+      currentStreamUrl = getApiUrl("/stream/" + currentHash);
+      window.StreamEntityNative.playMedia(currentStreamUrl, currentTitle);
+      setText("videoStatus", "Streaming (Hardware)");
+      $("videoStatus").classList.remove("idle");
+      syncNowPlayingControls();
+      return;
+    }
+
     var isMkv = false;
     var candNames = [];
     if (t) {
@@ -3414,17 +3436,26 @@
 
   if (btnNpPause) {
     btnNpPause.addEventListener("click", function () {
+      if (window.StreamEntityNative && typeof window.StreamEntityNative.pauseMedia === "function") {
+        window.StreamEntityNative.pauseMedia();
+      }
       pauseStream();
     });
   }
 
   if (btnNpResume) {
     btnNpResume.addEventListener("click", function () {
+      if (window.StreamEntityNative && typeof window.StreamEntityNative.resumeMedia === "function") {
+        window.StreamEntityNative.resumeMedia();
+      }
       resumeStream();
     });
   }
 
   function stopAndRemoveActiveStream(specificHash) {
+    if (window.StreamEntityNative && typeof window.StreamEntityNative.stopMedia === "function") {
+      window.StreamEntityNative.stopMedia();
+    }
     var hashToRemove = specificHash || currentHash || (latestTorrents && latestTorrents[0] ? latestTorrents[0].infoHash : null);
     if (!specificHash || specificHash === currentHash || (latestTorrents && latestTorrents.length <= 1)) {
       clearTimeout(hudTimer);
